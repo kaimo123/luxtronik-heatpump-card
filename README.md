@@ -5,9 +5,6 @@ Built for use with the [BenPru/luxtronik](https://github.com/BenPru/luxtronik) i
 any entities you point it at. The structure is inspired by
 [lovelace-heat-pump-card](https://github.com/ManfredTremmel/lovelace-heat-pump-card).
 
-The schematic follows the water: ground loop → heat pump → **one shared flow/return pipe** →
-heating buffer tank and DHW tank → mixing valve → underfloor heating (up to **9 zones**) and
-radiators (up to ).
 
 The schematic follows the water: ground loop → heat pump → one shared flow/return pipe → 
 heating buffer tank and DHW tank → mixing valve → underfloor heating (**9 thermostats**) and 
