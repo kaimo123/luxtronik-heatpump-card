@@ -104,11 +104,3 @@ radiators:
 A tank's colour follows its temperature (blue at 20 °C → red at 60 °C) when `buffer_temp` / `dhw_temp` is set.
 If an entity is configured but does not exist, its value is shown dimmed as `?` so you can spot typos.
 
-## Changelog
-
-### 2.1.0
-- Removed entity auto-detection and the `prefix` option. Only configured entities are shown.
-- Underfloor heating and radiators now both support 9 thermostats (3 × 3 grids).
-- Thermostat names default to the entity's friendly name.
-- Fixed the return-flow animation: dots now travel from the radiators / floor circuit back to the buffer tank.
-- Smaller pipe arrowheads; buffer tank title no longer collides with its flow pipe.
