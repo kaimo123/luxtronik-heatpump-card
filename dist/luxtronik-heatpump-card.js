@@ -4,10 +4,10 @@
  * Iga andur on valikuline: mida pole seadistatud ega leita, seda ei kuvata.
  */
 const LHC_VERSION = "2.2.0";
-const W = 1460, H = 890, D = 60; // D = parempoolse osa nihe
+const W = 1460, D = 60; // D = parempoolse osa nihe
 const HOT = "#e5533d", COLD = "#3d8be5", BRINE = "#4fb3d9", MIX = "#f0a030", GROUND = "#a98467";
 const FX = [1030, 1160, 1290], FY = [125, 225, 325];
-const RYS = [510, 622, 734]; // radiaatorite ridade pealevoolutorude y
+const RYS = [510, 622, 734]; // radiaatorite ridade pealevoolutorude y (kuvatakse vaid vajalikud read)
 const cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
 const I18N = {
@@ -129,6 +129,11 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       o.push(`<g class="flow" data-flow="${esc(entity)}" pointer-events="none">${paths.map((d) => `<path d="${d}"/>`).join("")}</g>`);
     };
 
+    // radiaatorite read: ainult nii palju, kui valitud olemeid on (3 tk reas)
+    const nRows = radOn ? Math.max(1, Math.ceil(this._rads.length / 3)) : 0;
+    const RY = RYS.slice(0, nRows);
+    const RET_BOTTOM = nRows ? RY[nRows - 1] + 116 : 850; // radiaatorite tagasivoolu põhitoru y
+    const H = Math.max(720, nRows ? RET_BOTTOM + 40 : 0);
     o.push(`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"><defs>`);
     [["h", HOT], ["c", COLD], ["b", BRINE]].forEach(([n, c]) =>
       o.push(`<marker id="m${n}" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${c}"/></marker>`));
@@ -192,8 +197,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       val(700, 604, R.dhw_mode);
     }
     const loads = floorOn || radOn;
-    const RET_BOTTOM = 850;                     // radiaatorite tagasivoolu põhitoru y
-    const supTrunkEnd = radOn ? RYS[0] : 160;
+    const supTrunkEnd = radOn ? RY[0] : 160;
     if (bufOn && loads) {
       pipe(`M760,110 H830 V${supTrunkEnd}`, HOT);
       pipe(`M800,340 H760`, COLD, "c");
@@ -227,36 +231,36 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       }));
     }
     if (radOn) {
-      box(940, 450, 440, 420, HOT); lbl(1160, 478, L.radiators);
-      const [y0, y1, y2] = RYS, xs = 960, xr = 1362;
-      // pealevool: magistraal → rida 0, tõusutoru vasakul, read 1 ja 2
-      pipe(`M830,${y0} H1340`, HOT, "h"); pipe(`M${xs},${y0} V${y2}`, HOT);
-      pipe(`M${xs},${y1} H1340`, HOT, "h"); pipe(`M${xs},${y2} H1340`, HOT, "h");
+      box(940, 450, 440, RET_BOTTOM + 20 - 450, HOT); lbl(1160, 478, L.radiators);
+      const y0 = RY[0], yl = RY[nRows - 1], xs = 960, xr = 1362;
+      // pealevool: magistraal → esimene rida, tõusutoru vasakul, järgmised read
+      pipe(`M830,${y0} H1340`, HOT, "h");
+      if (nRows > 1) pipe(`M${xs},${y0} V${yl}`, HOT);
+      RY.slice(1).forEach((ys) => pipe(`M${xs},${ys} H1340`, HOT, "h"));
       // tagasivool: read → parempoolne tõusutoru → põhitoru → magistraal
-      RYS.forEach((ys) => pipe(`M1000,${ys + 88} H${xr}`, COLD));
-      pipe(`M${xr},${RYS[0] + 88} V${RET_BOTTOM}`, COLD); pipe(`M${xr},${RET_BOTTOM} H800`, COLD, "c");
+      RY.forEach((ys) => pipe(`M1000,${ys + 88} H${xr}`, COLD));
+      pipe(`M${xr},${y0 + 88} V${RET_BOTTOM}`, COLD); pipe(`M${xr},${RET_BOTTOM} H800`, COLD, "c");
       val(885, y0 - 34, R.rad_flow, { prefix: L.flow });
       val(885, RET_BOTTOM - 24, R.rad_return, { prefix: L.return });
-      let n = 0;
-      RYS.forEach((ys) => FX.forEach((cx) => {
-        const r = this._rads[n];
+      // radiaator ilmub ainult siis, kui selle olem on valitud
+      this._rads.forEach((r, n) => {
+        const ys = RY[Math.floor(n / 3)], cx = FX[n % 3];
         box(cx - 58, ys + 12, 116, 64, "#888", 8, 0.15);
         pipe(`M${cx},${ys} V${ys + 12}`, HOT, null, 4); pipe(`M${cx},${ys + 76} V${ys + 88}`, COLD, null, 4);
-        if (r) {
-          nm(cx, ys + 28, nameOf(this._rads, n, this._floor.length), 13);
-          val(cx, ys + 47, r.entity, { attr: "current_temperature", size: 18, bold: true });
-          val(cx, ys + 65, r.entity, { attr: "temperature", prefix: "→ ", size: 14 });
-        }
-        n++;
-      }));
+        nm(cx, ys + 28, nameOf(this._rads, n, this._floor.length), 13);
+        val(cx, ys + 47, r.entity, { attr: "current_temperature", size: 18, bold: true });
+        val(cx, ys + 65, r.entity, { attr: "temperature", prefix: "→ ", size: 14 });
+      });
     }
     if (bufOn && loads) {
       const p = [`M760,110 H830 V${supTrunkEnd}`];
       if (radOn) {
-        const [y0, y1, y2] = RYS, xs = 960, xr = 1362;
-        const rp = [`M830,${y0} H1340`, `M${xs},${y0} V${y2}`, `M${xs},${y1} H1340`, `M${xs},${y2} H1340`];
-        RYS.forEach((ys) => FX.forEach((cx) => rp.push(`M${cx},${ys} V${ys + 12}`, `M${cx},${ys + 76} V${ys + 88}`)));
-        RYS.forEach((ys) => rp.push(`M1000,${ys + 88} H${xr}`));
+        const y0 = RY[0], yl = RY[nRows - 1], xs = 960, xr = 1362;
+        const rp = [`M830,${y0} H1340`];
+        if (nRows > 1) rp.push(`M${xs},${y0} V${yl}`);
+        RY.slice(1).forEach((ys) => rp.push(`M${xs},${ys} H1340`));
+        this._rads.forEach((r, n) => { const ys = RY[Math.floor(n / 3)], cx = FX[n % 3]; rp.push(`M${cx},${ys} V${ys + 12}`, `M${cx},${ys + 76} V${ys + 88}`); });
+        RY.forEach((ys) => rp.push(`M1000,${ys + 88} H${xr}`));
         rp.push(`M${xr},${y0 + 88} V${RET_BOTTOM} H800 V340 H760`);   // tagasivool: radiaatoritelt akupaaki
         if (R.rad_pump) flow(R.rad_pump, rp); else p.push(...rp);       // oma pump → oma animatsioon
         pump(885, y0, R.rad_pump);
