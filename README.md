@@ -7,7 +7,11 @@ any entities you point it at. The structure is inspired by
 
 The schematic follows the water: ground loop → heat pump → **one shared flow/return pipe** →
 heating buffer tank and DHW tank → mixing valve → underfloor heating (up to **9 zones**) and
-radiators (up to **9 thermostats**).
+radiators (up to ).
+
+The schematic follows the water: ground loop → heat pump → one shared flow/return pipe → 
+heating buffer tank and DHW tank → mixing valve → underfloor heating (**9 thermostats**) and 
+radiators (**up to 9 TRV-s**).
 
 - **Every sensor is optional.** Whatever you don't configure is not shown. If a whole section has nothing
   configured (e.g. no radiators, no mixing valve), it is left out of the schematic.
