@@ -1,13 +1,13 @@
 /*!
- * Luxtronik Heatpump Card  v2.2.0
+ * Luxtronik Heatpump Card  v2.3.0
  * Maasoojuspumba skeemikaart (Home Assistant + BenPru/luxtronik).
  * Iga andur on valikuline: mida pole seadistatud ega leita, seda ei kuvata.
  */
-const LHC_VERSION = "2.2.0";
+const LHC_VERSION = "2.3.0";
 const W = 1460, D = 60; // D = parempoolse osa nihe
 const HOT = "#e5533d", COLD = "#3d8be5", BRINE = "#4fb3d9", MIX = "#f0a030", GROUND = "#a98467";
-const FX = [1030, 1160, 1290], FY = [125, 225, 325];
-const RYS = [510, 622, 734]; // radiaatorite ridade pealevoolutorude y (kuvatakse vaid vajalikud read)
+const FX = [1030, 1160, 1290], LP = 120; // põrandakütte ridade samm
+const FY = [125, 125 + LP, 125 + 2 * LP]; // termostaatide ridade keskkohad
 const cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
 const I18N = {
@@ -130,10 +130,19 @@ class LuxtronikHeatpumpCard extends HTMLElement {
     };
 
     // radiaatorite read: ainult nii palju, kui valitud olemeid on (3 tk reas)
+    // põrandakütte maht: ridu on vaja nii palju, kui on tsoone; torulaineid on alati paarisarv (sisse ja tagasi)
+    const nFR = Math.max(1, Math.ceil(this._floor.length / 3));
+    const K = 2 * Math.ceil(nFR / 2);
+    const FLOOR_Y = 160 + LP * (K - 1);           // põranda tagasivoolutoru y
+    const FLOOR_BOTTOM = FLOOR_Y + 40;            // põrandakütte raami alumine serv
+    let serp = "M940,160 H1362";                  // torulaine (serpentiin) põranda sees
+    for (let k = 1; k < K; k++) serp += ` V${160 + LP * k} H${k % 2 ? 958 : 1362}`;
+    serp += " H940";
+    const RB = floorOn ? FLOOR_BOTTOM + 50 : 450; // radiaatorite raami ülemine serv
     const nRows = radOn ? Math.max(1, Math.ceil(this._rads.length / 3)) : 0;
-    const RY = RYS.slice(0, nRows);
+    const RY = [0, 112, 224].slice(0, nRows).map((d) => RB + 60 + d);
     const RET_BOTTOM = nRows ? RY[nRows - 1] + 116 : 850; // radiaatorite tagasivoolu põhitoru y
-    const H = Math.max(720, nRows ? RET_BOTTOM + 40 : 0);
+    const H = Math.max(650, dhwOn ? 720 : 0, floorOn ? FLOOR_BOTTOM + 30 : 0, nRows ? RET_BOTTOM + 40 : 0);
     o.push(`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"><defs>`);
     [["h", HOT], ["c", COLD], ["b", BRINE]].forEach(([n, c]) =>
       o.push(`<marker id="m${n}" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${c}"/></marker>`));
@@ -167,7 +176,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       if (bufOn && dhwOn) {
         pipe("M540,200 H700", HOT, "h"); pipe("M640,200 V480 H700", HOT, "h");
         pipe("M700,560 H540", COLD, "c"); pipe(`M700,330 H${640 + 8} A8,8 0 0 0 ${640 - 8},330 H590 V560`, COLD);
-        flow(R.heating_pump, ["M540,200 H700", `M700,330 H648 A8,8 0 0 0 632,330 H590 V560`]);
+        flow(R.heating_pump, ["M540,200 H700", `M700,330 H648 A8,8 0 0 0 632,330 H590 V560 H540`]);
         flow(R.dhw_pump, ["M640,200 V480 H700", "M700,560 H540"]);
       } else if (bufOn) {
         pipe("M540,200 H700", HOT, "h"); pipe("M700,330 H590 V560 H540", COLD, "c");
@@ -202,23 +211,23 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       pipe(`M760,110 H830 V${supTrunkEnd}`, HOT);
       pipe(`M800,340 H760`, COLD, "c");
       if (radOn) pipe(`M800,${RET_BOTTOM} V340`, COLD);
-      if (floorOn) pipe(`M800,300 V340`, COLD);
+      if (floorOn) pipe(`M800,${FLOOR_Y} V340`, COLD);
     }
     if (floorOn) {
-      box(940, 40, 440, 360, MIX); lbl(1160, 64, L.floor);
+      box(940, 40, 440, FLOOR_BOTTOM - 40, MIX); lbl(1160, 64, L.floor);
       pipe("M830,160 H940", HOT, "h");
-      pipe(radOn ? "M940,300 H838 A8,8 0 0 0 822,300 H800" : "M940,300 H800", COLD, "c");
-      pipe("M940,160 H1362 V230 H958 V300 H940", MIX, null, 8);
+      pipe(radOn ? `M940,${FLOOR_Y} H838 A8,8 0 0 0 822,${FLOOR_Y} H800` : `M940,${FLOOR_Y} H800`, COLD, "c");
+      pipe(serp, MIX, null, 8);
       if (mixerOn) {
         lbl(885, 140, L.mixer, 14);
         o.push(`<circle cx="905" cy="160" r="18" fill="#222" fill-opacity=".35" stroke="${MIX}" stroke-width="3"/><path d="M893,152 L917,168 M893,168 L917,152" stroke="${MIX}" stroke-width="3"/>`);
         pump(862, 160, R.mix_pump);
-        val(885, 205, R.mix_flow, { prefix: L.flow }); val(885, 238, R.mix_target, { prefix: L.target });
-        val(885, 271, R.heating_mode);
-        val(885, 330, R.mix_return, { prefix: L.floor_return });
+        val(885, 200, R.mix_flow, { prefix: L.flow }); val(885, 230, R.mix_target, { prefix: L.target });
+        val(885, 260, R.heating_mode);
+        val(885, FLOOR_Y + 30, R.mix_return, { prefix: L.floor_return });
       }
       // põrandakütte voolu animatsioon (tagasivool jätkub akupaagini, kui radiaatoreid pole)
-      flow(R.mix_pump, [`M830,160 H1362 V230 H958 V300 H800 V340${radOn ? "" : " H760"}`]);
+      flow(R.mix_pump, [`${serp.replace("M940,160", "M830,160").replace(/ H940$/, "")} H800 V340${radOn ? "" : " H760"}`]);
       let n = 0;
       FY.forEach((y) => FX.forEach((cx) => {
         const f = this._floor[n];
@@ -231,7 +240,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       }));
     }
     if (radOn) {
-      box(940, 450, 440, RET_BOTTOM + 20 - 450, HOT); lbl(1160, 478, L.radiators);
+      box(940, RB, 440, RET_BOTTOM + 20 - RB, HOT); lbl(1160, RB + 28, L.radiators);
       const y0 = RY[0], yl = RY[nRows - 1], xs = 960, xr = 1362;
       // pealevool: magistraal → esimene rida, tõusutoru vasakul, järgmised read
       pipe(`M830,${y0} H1340`, HOT, "h");
