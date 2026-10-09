@@ -1,12 +1,14 @@
 /*!
- * Luxtronik Heatpump Card  v2.0.0
+ * Luxtronik Heatpump Card  v2.1.0
  * Maasoojuspumba skeemikaart (Home Assistant + BenPru/luxtronik).
  * Iga andur on valikuline: mida pole seadistatud ega leita, seda ei kuvata.
  */
-const LHC_VERSION = "2.0.0";
-const W = 1360, H = 740, D = 60; // D = parempoolse osa nihe
+const LHC_VERSION = "2.1.0";
+const W = 1460, H = 890, D = 60; // D = parempoolse osa nihe
 const HOT = "#e5533d", COLD = "#3d8be5", BRINE = "#4fb3d9", MIX = "#f0a030", GROUND = "#a98467";
-const FX = [1005, 1110, 1215], FY = [125, 225, 325];
+const FX = [1030, 1160, 1290], FY = [125, 225, 325];
+const RYS = [510, 622, 734]; // radiaatorite ridade pealevoolutorude y
+const cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
 const I18N = {
   et: {
@@ -29,35 +31,13 @@ const I18N = {
   },
 };
 
-/* Kõik seadistatavad olemid: võti → [domeenid, vaikenimi (või null)] */
-const defaults = (p) => ({
-  brine_in: `sensor.${p}_heat_source_input_temperature`,
-  brine_out: `sensor.${p}_heat_source_output_temperature`,
-  brine_pump: `binary_sensor.${p}_brine_pump`,
-  status: `sensor.${p}_status`,
-  compressor: `binary_sensor.${p}_compressor`,
-  outdoor: `sensor.${p}_outdoor_temperature`,
-  outdoor_avg: `sensor.${p}_outdoor_temperature_average`,
-  hot_gas: `sensor.${p}_hot_gas_temperature`,
-  flow_out: `sensor.${p}_flow_out_temperature`,
-  flow_in: `sensor.${p}_flow_in_temperature`,
-  flow_in_target: `sensor.${p}_flow_in_target_temperature`,
-  cop: `sensor.${p}_cop`,
-  capacity: `sensor.${p}_heating_capacity`,
-  hours: `sensor.${p}_operation_hours`,
-  heating_pump: `binary_sensor.${p}_heating_pump`,
-  dhw_temp: `sensor.${p}_domestic_water_temperature`,
-  dhw_target: `sensor.${p}_domestic_water_target_temperature`,
-  dhw_mode: `climate.${p}_domestic_water`,
-  dhw_pump: `binary_sensor.${p}_dhw_pump`,
-  mix_flow: `sensor.${p}_mixed_circuit_1_flow_out_temperature`,
-  mix_target: `sensor.${p}_mixed_circuit_1_flow_out_target_temperature`,
-  mix_pump: `binary_sensor.${p}_mixed_circuit_1_pump`,
-  heating_mode: `climate.${p}_heating`,
-});
-// võtmed, millel pole vaikenime (kuvatakse ainult kui kasutaja seadistab)
-const NO_DEFAULT = ["buffer_temp", "buffer_target", "defrost", "additional_heating"];
-const ALL_KEYS = [...Object.keys(defaults("x")), ...NO_DEFAULT];
+/* Kõik seadistatavad olemite võtmed. Kuvatakse ainult need, mis on seadistatud. */
+const ALL_KEYS = [
+  "brine_in", "brine_out", "brine_pump", "status", "compressor", "outdoor", "outdoor_avg", "hot_gas",
+  "flow_out", "flow_in", "flow_in_target", "cop", "capacity", "hours", "defrost", "additional_heating",
+  "heating_pump", "buffer_temp", "buffer_target", "dhw_temp", "dhw_target", "dhw_mode", "dhw_pump",
+  "mix_flow", "mix_target", "mix_pump", "heating_mode",
+];
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -66,9 +46,8 @@ class LuxtronikHeatpumpCard extends HTMLElement {
     if (!config) throw new Error("Invalid configuration");
     const c = { ...config, ...(config.entities || {}) }; // vana `entities:` jääb toetatuks
     this._cfg = c;
-    this._defaults = defaults(c.prefix || "luxtronik");
     this._floor = this._list(c.floor, 9);
-    this._rads = this._list(c.radiators, 3);
+    this._rads = this._list(c.radiators, 9);
     this._extras = this._list(c.extras, 6);
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     this._sig = null;
@@ -81,21 +60,24 @@ class LuxtronikHeatpumpCard extends HTMLElement {
   getCardSize() { return 8; }
 
   static getConfigElement() { return document.createElement("luxtronik-heatpump-card-editor"); }
-  static getStubConfig() { return { prefix: "luxtronik", floor: [], radiators: [] }; }
+  static getStubConfig() { return { floor: [], radiators: [] }; }
 
   _lang() {
     const l = this._cfg.language || (this._hass && this._hass.language) || "et";
     return I18N[String(l).slice(0, 2)] || I18N.en;
   }
 
-  /* Leiab olemi: seadistatud → kasuta; muidu vaikenimi, kui see HA-s olemas; muidu null */
+  /* Olem on seadistatud või puudub (siis ei kuvata) */
   _ent(key) {
     const c = this._cfg[key];
-    if (c === false || c === null || c === "") return null;
-    if (c) return c;
-    if (this._cfg.auto === false) return null;
-    const d = this._defaults[key];
-    return d && this._hass.states[d] ? d : null;
+    return c && typeof c === "string" ? c : null;
+  }
+
+  /* Termostaadi nimi: seadistatud `name` või olemi enda nimi */
+  _name(e) {
+    if (e.name) return e.name;
+    const st = this._hass && this._hass.states[e.entity];
+    return (st && st.attributes.friendly_name) || e.entity;
   }
 
   _resolve() {
@@ -106,7 +88,8 @@ class LuxtronikHeatpumpCard extends HTMLElement {
 
   _maybeBuild() {
     const R = this._resolve();
-    const sig = JSON.stringify([R, this._floor, this._rads, this._extras, this._cfg.title, this._cfg.language, this._hass.language,
+    this._names = [...this._floor, ...this._rads].map((e) => this._name(e));
+    const sig = JSON.stringify([R, this._floor, this._rads, this._extras, this._names, this._cfg.title, this._cfg.language, this._hass.language,
       ["show_collector", "show_buffer", "show_dhw", "show_floor", "show_radiators", "show_mixer"].map((k) => this._cfg[k])]);
     if (sig === this._sig) return;
     this._sig = sig;
@@ -128,6 +111,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
 
     const box = (x, y, w, h, c, r = 14, op = 0.1, extra = "") =>
       o.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${c}" fill-opacity="${op}" stroke="${c}" stroke-opacity=".7" stroke-width="2" ${extra}/>`);
+    const nm = (x, y, s, size = 14) => o.push(`<text class="nm" x="${x}" y="${y}" font-size="${size}"><title>${esc(s)}</title>${esc(cut(s, 15))}</text>`);
     const lbl = (x, y, s, size = 17) => o.push(`<text class="lbl" x="${x}" y="${y}" font-size="${size}">${esc(s)}</text>`);
     const pipe = (d, c, m, w = 6) =>
       o.push(`<path d="${d}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"${m ? ` marker-end="url(#m${m})"` : ""}/>`);
@@ -146,7 +130,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
 
     o.push(`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"><defs>`);
     [["h", HOT], ["c", COLD], ["b", BRINE]].forEach(([n, c]) =>
-      o.push(`<marker id="m${n}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${c}"/></marker>`));
+      o.push(`<marker id="m${n}" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${c}"/></marker>`));
     o.push("</defs>");
 
     /* --- maakollektor --- */
@@ -193,9 +177,11 @@ class LuxtronikHeatpumpCard extends HTMLElement {
 
     /* --- parempoolne osa (nihutatud) --- */
     o.push(`<g transform="translate(${D},0)">`);
+    const names = this._names || [];
+    const nameOf = (list, i, offset) => names[offset + i] || list[i].entity;
     if (bufOn) {
       box(640, 90, 120, 280, HOT, 14, 0.1, R.buffer_temp ? `data-fill="${esc(R.buffer_temp)}"` : "");
-      lbl(700, 118, L.buffer, 14);
+      lbl(700, 138, L.buffer, 14);
       val(700, 190, R.buffer_temp, { prefix: L.temp, size: 19, bold: true }); val(700, 232, R.buffer_target, { prefix: L.target });
     }
     if (dhwOn) {
@@ -204,15 +190,20 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       val(700, 520, R.dhw_temp, { prefix: L.water, size: 19, bold: true }); val(700, 562, R.dhw_target, { prefix: L.target });
       val(700, 604, R.dhw_mode);
     }
-    if (bufOn && (floorOn || radOn)) {
-      pipe(`M760,110 H830 V${radOn ? 520 : 160}`, HOT);
-      pipe(`M760,340 H800 V${radOn ? 680 : 300}`, COLD);
+    const loads = floorOn || radOn;
+    const RET_BOTTOM = 850;                     // radiaatorite tagasivoolu põhitoru y
+    const supTrunkEnd = radOn ? RYS[0] : 160;
+    if (bufOn && loads) {
+      pipe(`M760,110 H830 V${supTrunkEnd}`, HOT);
+      pipe(`M800,340 H760`, COLD, "c");
+      if (radOn) pipe(`M800,${RET_BOTTOM} V340`, COLD);
+      if (floorOn) pipe(`M800,300 V340`, COLD);
     }
     if (floorOn) {
-      box(940, 40, 340, 360, MIX); lbl(1110, 64, L.floor);
+      box(940, 40, 440, 360, MIX); lbl(1160, 64, L.floor);
       pipe("M830,160 H940", HOT, "h");
       pipe(radOn ? "M940,300 H838 A8,8 0 0 0 822,300 H800" : "M940,300 H800", COLD, "c");
-      pipe("M940,160 H1262 V230 H958 V300 H940", MIX, null, 8);
+      pipe("M940,160 H1362 V230 H958 V300 H940", MIX, null, 8);
       if (mixerOn) {
         lbl(885, 140, L.mixer, 14);
         o.push(`<circle cx="905" cy="160" r="18" fill="#222" fill-opacity=".35" stroke="${MIX}" stroke-width="3"/><path d="M893,152 L917,168 M893,168 L917,152" stroke="${MIX}" stroke-width="3"/>`);
@@ -220,12 +211,13 @@ class LuxtronikHeatpumpCard extends HTMLElement {
         val(885, 205, R.mix_flow, { prefix: L.flow }); val(885, 238, R.mix_target, { prefix: L.target });
         val(885, 271, R.heating_mode);
       }
-      flow(R.mix_pump, ["M830,160 H1262 V230 H958 V300 H800"]);
+      // põrandakütte voolu animatsioon (tagasivool jätkub akupaagini, kui radiaatoreid pole)
+      flow(R.mix_pump, [`M830,160 H1362 V230 H958 V300 H800 V340${radOn ? "" : " H760"}`]);
       let n = 0;
       FY.forEach((y) => FX.forEach((cx) => {
         const f = this._floor[n];
         if (f) {
-          lbl(cx, y - 32, f.name || L.floor_n + (n + 1), 15);
+          nm(cx, y - 32, nameOf(this._floor, n, 0));
           val(cx, y - 6, f.entity, { attr: "current_temperature", size: 19, bold: true });
           val(cx, y + 22, f.entity, { attr: "temperature", prefix: "→ ", size: 15 });
         }
@@ -233,24 +225,36 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       }));
     }
     if (radOn) {
-      box(940, 470, 340, 255, HOT); lbl(1110, 495, L.radiators);
-      pipe("M830,520 H1240", HOT, "h"); pipe("M1240,680 H800", COLD, "c");
-      FX.forEach((cx, i) => {
-        const r = this._rads[i];
-        box(cx - 40, 555, 80, 90, "#888", 8, 0.15);
-        for (let k = -24; k <= 24; k += 12)
-          o.push(`<line x1="${cx + k}" y1="562" x2="${cx + k}" y2="638" stroke="#999" stroke-opacity=".35" stroke-width="2"/>`);
-        pipe(`M${cx},520 V555`, HOT, null, 4); pipe(`M${cx},645 V680`, COLD, null, 4);
+      box(940, 450, 440, 420, HOT); lbl(1160, 478, L.radiators);
+      const [y0, y1, y2] = RYS, xs = 960, xr = 1362;
+      // pealevool: magistraal → rida 0, tõusutoru vasakul, read 1 ja 2
+      pipe(`M830,${y0} H1340`, HOT, "h"); pipe(`M${xs},${y0} V${y2}`, HOT);
+      pipe(`M${xs},${y1} H1340`, HOT, "h"); pipe(`M${xs},${y2} H1340`, HOT, "h");
+      // tagasivool: read → parempoolne tõusutoru → põhitoru → magistraal
+      RYS.forEach((ys) => pipe(`M1000,${ys + 88} H${xr}`, COLD));
+      pipe(`M${xr},${RYS[0] + 88} V${RET_BOTTOM}`, COLD); pipe(`M${xr},${RET_BOTTOM} H800`, COLD, "c");
+      let n = 0;
+      RYS.forEach((ys) => FX.forEach((cx) => {
+        const r = this._rads[n];
+        box(cx - 58, ys + 12, 116, 64, "#888", 8, 0.15);
+        pipe(`M${cx},${ys} V${ys + 12}`, HOT, null, 4); pipe(`M${cx},${ys + 76} V${ys + 88}`, COLD, null, 4);
         if (r) {
-          lbl(cx, 712, r.name || L.rad_n + (i + 1), 15);
-          val(cx, 588, r.entity, { attr: "current_temperature", size: 19, bold: true });
-          val(cx, 616, r.entity, { attr: "temperature", prefix: "→ ", size: 15 });
+          nm(cx, ys + 28, nameOf(this._rads, n, this._floor.length), 13);
+          val(cx, ys + 47, r.entity, { attr: "current_temperature", size: 18, bold: true });
+          val(cx, ys + 65, r.entity, { attr: "temperature", prefix: "→ ", size: 14 });
         }
-      });
+        n++;
+      }));
     }
-    if (bufOn && (floorOn || radOn)) {
-      const p = [`M760,110 H830 V${radOn ? 520 : 160}`, `M760,340 H800 V${radOn ? 680 : 300}`];
-      if (radOn) p.push("M830,520 H1240", "M1240,680 H800", ...FX.map((x) => `M${x},520 V555`), ...FX.map((x) => `M${x},645 V680`));
+    if (bufOn && loads) {
+      const p = [`M760,110 H830 V${supTrunkEnd}`];
+      if (radOn) {
+        const [y0, y1, y2] = RYS, xs = 960, xr = 1362;
+        p.push(`M830,${y0} H1340`, `M${xs},${y0} V${y2}`, `M${xs},${y1} H1340`, `M${xs},${y2} H1340`);
+        RYS.forEach((ys) => FX.forEach((cx) => p.push(`M${cx},${ys} V${ys + 12}`, `M${cx},${ys + 76} V${ys + 88}`)));
+        RYS.forEach((ys) => p.push(`M1000,${ys + 88} H${xr}`));
+        p.push(`M${xr},${y0 + 88} V${RET_BOTTOM} H800 V340 H760`);   // tagasivool: radiaatoritelt akupaaki
+      }
       flow(R.heating_pump, p);
     }
     o.push("</g></svg>");
@@ -266,6 +270,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
         .title{font-size:var(--ha-card-header-font-size,24px);padding:8px 12px 0}
         svg{width:100%;height:auto;display:block}
         .lbl{fill:var(--secondary-text-color);font-weight:700;letter-spacing:1px;text-anchor:middle}
+        .nm{fill:var(--secondary-text-color);text-anchor:middle;font-weight:500}
         .val{fill:var(--primary-text-color);text-anchor:middle;font-weight:500;cursor:pointer;
              stroke:var(--card-background-color);stroke-width:5px;paint-order:stroke;stroke-linejoin:round}
         .val.b{font-weight:700}
@@ -339,7 +344,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
 /* ---------- Visuaalne redaktor ---------- */
 const ED_LABELS = {
   et: {
-    title: "Pealkiri", prefix: "Olemite eesliide (vaikimisi luxtronik)", language: "Keel", auto: "Leia olemid eesliite järgi automaatselt",
+    title: "Pealkiri", language: "Keel",
     show_collector: "Näita maakollektorit", show_buffer: "Näita kütte akupaaki", show_dhw: "Näita tarbevee paaki",
     show_floor: "Näita põrandaküttet", show_radiators: "Näita radiaatoreid", show_mixer: "Näita segamissõlme",
     brine_in: "Kollektorisse (sisse) temp", brine_out: "Kollektorist (välja) temp", brine_pump: "Kollektori pump",
@@ -354,7 +359,7 @@ const ED_LABELS = {
     g_tanks: "Akupaagid", g_mix: "Segamissõlm", g_loads: "Küttekehad",
   },
   en: {
-    title: "Title", prefix: "Entity prefix (default luxtronik)", language: "Language", auto: "Auto-detect entities from prefix",
+    title: "Title", language: "Language",
     show_collector: "Show ground loop", show_buffer: "Show heating buffer", show_dhw: "Show DHW tank",
     show_floor: "Show underfloor heating", show_radiators: "Show radiators", show_mixer: "Show mixing valve",
     brine_in: "Ground loop in temp", brine_out: "Ground loop out temp", brine_pump: "Brine pump",
@@ -385,8 +390,6 @@ class LuxtronikHeatpumpCardEditor extends HTMLElement {
     const T = ED_LABELS[String(((this._hass && this._hass.language) || "et")).slice(0, 2)] || ED_LABELS.en;
     return [
       { name: "title", selector: { text: {} } },
-      { name: "prefix", selector: { text: {} } },
-      { name: "auto", selector: { boolean: {} } },
       { name: "language", selector: { select: { options: [{ value: "et", label: "Eesti" }, { value: "en", label: "English" }], mode: "dropdown" } } },
       grp(T.g_sections, ["show_collector", "show_buffer", "show_dhw", "show_floor", "show_radiators", "show_mixer"].map((n) => ({ name: n, selector: { boolean: {} } }))),
       grp(T.g_col, [e("brine_in", S), e("brine_out", S), e("brine_pump", B)]),
