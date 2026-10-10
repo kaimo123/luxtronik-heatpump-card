@@ -1,18 +1,18 @@
 /*!
- * Luxtronik Heatpump Card  v2.6.1
+ * Luxtronik Heatpump Card  v2.7.0
  * Maasoojuspumba skeemikaart (Home Assistant + BenPru/luxtronik).
  * Iga andur on valikuline: mida pole seadistatud ega leita, seda ei kuvata.
  */
-const LHC_VERSION = "2.6.1";
+const LHC_VERSION = "2.7.0";
 const W = 1460, D = 60; // D = parempoolse osa nihe
 const HOT = "#e5533d", COLD = "#3d8be5", BRINE = "#4fb3d9", MIX = "#f0a030", GROUND = "#a98467";
 const FX = [1030, 1160, 1290], LP = 88; // termostaatide veergude x ja ridade samm (sama mis radiaatoritel)
 const MAX_ITEMS = 9;                     // max termostaate põrandal / radiaatoritel
 const COP_CATS = ["heating", "dhw", "total"], COP_PERIODS = ["h24", "d7", "month", "year"];
 const COP_T = {
-  et: { heating: "Küte", dhw: "Tarbevesi", total: "Kokku", h24: "24 h", d7: "7 päeva", month: "Kuu", year: "Aasta (SCOP)",
+  et: { heating: "Küte", dhw: "Tarbevesi", total: "Kokku", h24: "24 h (COP)", d7: "7 päeva (COP)", month: "Kuu (COP)", year: "Aasta (SCOP)",
         loading: "Laen COP statistikat…", error: "COP statistika lugemine ebaõnnestus: " },
-  en: { heating: "Heating", dhw: "Hot water", total: "Total", h24: "24 h", d7: "7 days", month: "Month", year: "Year (SCOP)",
+  en: { heating: "Heating", dhw: "Hot water", total: "Total", h24: "24 h (COP)", d7: "7 days (COP)", month: "Month (COP)", year: "Year (SCOP)",
         loading: "Loading COP statistics…", error: "Failed to read COP statistics: " },
 };
 /* ηs piirid (EL 811/2013, soojuspumpade ruumisoojendid) – ligikaudne näit */
@@ -352,11 +352,23 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       : p === "month" ? back(Number(c.cop_month_days) || 30) : back(Number(c.cop_year_days) || 365);
   }
 
+  /* Soojus, elekter ja lisaküte liidetakse ainult nendest ajavahemikest, kus soojuse JA elektri andmed on olemas
+     (muidu moonutab erineva ajalooga andur COP-i, nt soojus 365 päeva, elekter 30 päeva). */
   _copCat(k, p) {
     const series = p === "h24" ? this._copData.hour : this._copData.day, since = this._copSince(p);
-    const g = (f) => (this._copId(k, f) ? this._copSum(series, this._copId(k, f), since) : null);
-    const aux = [g("aux"), g("aux2")].filter((x) => x != null);
-    return { p: g("produced"), c: g("consumed"), a: aux.length ? aux.reduce((x, y) => x + y, 0) : null };
+    const map = (f) => {
+      const id = this._copId(k, f), arr = id && series && series[id];
+      if (!id) return undefined;                       // andurit pole seadistatud
+      const m = new Map();
+      (arr || []).forEach((b) => { const t = new Date(b.start).getTime(); if (t >= since && b.change != null && isFinite(b.change)) m.set(t, b.change); });
+      return m;
+    };
+    const P = map("produced"), C = map("consumed"), A = [map("aux"), map("aux2")].filter(Boolean);
+    const sum = (m, keys) => { if (!m || !keys.length) return null; let s = 0; keys.forEach((t) => { s += m.get(t) || 0; }); return s; };
+    let keys;
+    if (P && C) keys = [...P.keys()].filter((t) => C.has(t));
+    else keys = [...((P || C) ? (P || C).keys() : [])];
+    return { p: sum(P, keys), c: sum(C, keys), a: A.length ? A.reduce((x, m) => x + sum(m, keys), 0) : null };
   }
 
   _copRow(k, p) {
@@ -387,7 +399,8 @@ class LuxtronikHeatpumpCard extends HTMLElement {
     const L = COP_T[String(c.language || (this._hass && this._hass.language) || "et").slice(0, 2)] || COP_T.en;
     if (this._copErr) return `<div class="copmsg err">${L.error}${esc(this._copErr)}</div>`;
     if (!this._copData) return `<div class="copmsg">${L.loading}</div>`;
-    const cats = COP_CATS.filter((k) => this._copId(k, "produced") || this._copId(k, "consumed") || (k === "total" && (this._copId("heating", "produced") || this._copId("dhw", "produced"))));
+    const cats = COP_CATS.filter((k) => c[`cop_show_${k}`] !== false).filter((k) => this._copId(k, "produced") || this._copId(k, "consumed") || (k === "total" && (this._copId("heating", "produced") || this._copId("dhw", "produced"))));
+    if (!cats.length) return "";
     const head = `<tr><th></th>${COP_PERIODS.map((p) => `<th>${L[p]}</th>`).join("")}</tr>`;
     const rows = cats.map((k) => {
       const tds = COP_PERIODS.map((p) => {
@@ -525,7 +538,7 @@ const ED_LABELS = {
     g_cop: "COP / SCOP (tabel kaardi all)", g_cop_heating: "COP: küte", g_cop_dhw: "COP: tarbevesi", g_cop_total: "COP: kokku (valikuline – muidu küte + tarbevesi)",
     cop_produced: "Toodetud soojus (kWh andur)", cop_consumed: "Tarbitud elekter (kWh andur)", cop_aux: "Lisaküte (andur)", cop_aux2: "Lisaküte 2 (andur)", cop_name: "Nimi",
     show_cop: "Näita COP / SCOP tabelit", cop_refresh_minutes: "COP uuendamise intervall (min)", cop_month_days: "Kuu pikkus (päeva)", cop_year_days: "Aasta pikkus (päeva)",
-    cop_aux_included: "Elektrianduri hulgas on lisaküte juba sees", cop_show_energy: "Näita soojuse / elektri kWh", cop_show_classes: "Näita energiaklasse (värvilised märgid)", cop_class_mode: "Klassi tüüp",
+    cop_aux_included: "Elektrianduri hulgas on lisaküte juba sees", cop_show_heating: "Näita rida: küte", cop_show_dhw: "Näita rida: tarbevesi", cop_show_total: "Näita rida: kokku", cop_show_energy: "Näita soojuse / elektri kWh", cop_show_classes: "Näita energiaklasse (värvilised märgid)", cop_class_mode: "Klassi tüüp",
   },
   en: {
     title: "Title", language: "Language",
@@ -546,7 +559,7 @@ const ED_LABELS = {
     g_cop: "COP / SCOP (table under the diagram)", g_cop_heating: "COP: heating", g_cop_dhw: "COP: hot water", g_cop_total: "COP: total (optional – otherwise heating + hot water)",
     cop_produced: "Heat produced (kWh sensor)", cop_consumed: "Electricity consumed (kWh sensor)", cop_aux: "Aux heater (sensor)", cop_aux2: "Aux heater 2 (sensor)", cop_name: "Name",
     show_cop: "Show COP / SCOP table", cop_refresh_minutes: "COP refresh interval (min)", cop_month_days: "Month length (days)", cop_year_days: "Year length (days)",
-    cop_aux_included: "Consumed sensor already includes aux heater", cop_show_energy: "Show heat / electricity kWh", cop_show_classes: "Show energy classes (colored badges)", cop_class_mode: "Class type",
+    cop_aux_included: "Consumed sensor already includes aux heater", cop_show_heating: "Show row: heating", cop_show_dhw: "Show row: hot water", cop_show_total: "Show row: total", cop_show_energy: "Show heat / electricity kWh", cop_show_classes: "Show energy classes (colored badges)", cop_class_mode: "Class type",
   },
 };
 
@@ -585,6 +598,9 @@ class LuxtronikHeatpumpCardEditor extends HTMLElement {
         { name: "cop_refresh_minutes", selector: { number: { min: 1, max: 1440, mode: "box" } } },
         { name: "cop_month_days", selector: { number: { min: 1, max: 366, mode: "box" } } },
         { name: "cop_year_days", selector: { number: { min: 7, max: 366, mode: "box" } } },
+        { name: "cop_show_heating", selector: { boolean: {} } },
+        { name: "cop_show_dhw", selector: { boolean: {} } },
+        { name: "cop_show_total", selector: { boolean: {} } },
         { name: "cop_aux_included", selector: { boolean: {} } },
         { name: "cop_show_energy", selector: { boolean: {} } },
         { name: "cop_show_classes", selector: { boolean: {} } },
@@ -614,7 +630,9 @@ class LuxtronikHeatpumpCardEditor extends HTMLElement {
     this._form.hass = this._hass;
     this._form.schema = this._schema();
     this._form.computeLabel = this._label();
-    this._form.data = this._config || {};
+    // vaikimisi sisselülitatud lülitid näitavad redaktoris õiget olekut
+    const defs = { show_cop: true, cop_show_heating: true, cop_show_dhw: true, cop_show_total: true, cop_show_classes: true, cop_show_energy: true };
+    this._form.data = { ...defs, ...(this._config || {}) };
   }
 }
 
