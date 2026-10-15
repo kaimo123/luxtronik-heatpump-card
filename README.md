@@ -39,7 +39,7 @@ radiators (**up to 9 TRV-s**).
    `/hacsfiles/luxtronik-heatpump-card/luxtronik-heatpump-card.js`
 
 Manual install: copy `luxtronik-heatpump-card.js` to `/config/www/` and add the resource
-`/local/luxtronik-heatpump-card.js?v=2.8.5` as a **JavaScript module**. Raise the `?v=` number after every update
+`/local/luxtronik-heatpump-card.js?v=2.9.0` as a **JavaScript module**. Raise the `?v=` number after every update
 so the browser doesn't use its cached copy.
 
 Then add the card from the card picker (**Luxtronik Heatpump Card**) and configure it in the visual editor,
@@ -202,6 +202,7 @@ official class depends on the product data sheet.
 | `cop_total_produced`, `cop_total_consumed`, `cop_total_aux`, `cop_total_aux2`, `cop_total_name` | Total row (optional, otherwise heating + hot water) |
 | `cop_show_heating`, `cop_show_dhw`, `cop_show_total` | Set a row to `false` to remove it from the table (default `true`) |
 | `cop_aux_included` | `true` if the consumed sensors already include the auxiliary heater (default `false`: aux is added) |
+| `cop_heat_correction` | Factor applied to produced heat before COP/SCOP (default `1`). Use e.g. `0.55` when the heat meter over-reads by ~1.8x | number | `1` |
 | `cop_show_classes` | Coloured energy-class badges (default `true`) |
 | `cop_class_mode` | `eu_low` (low-temperature, ≤ 35 °C, default) or `eu_medium` (55 °C) |
 | `cop_show_energy` | Show heat / electricity kWh under the COP (default `true`) |
@@ -210,6 +211,8 @@ official class depends on the product data sheet.
 | `show_cop` | Hide the whole table with `false` |
 
 ## Changelog
+
+- **2.9.0** New `cop_heat_correction` (multiplies the produced heat before COP/SCOP; e.g. `0.55` if the heat meter reads ~1.8x too high). While the DHW pump runs, the heating-buffer branch is idle (no dots), like a diverter valve. Heating/DHW mode text is hidden when the mode is "Automatic" (other modes still show). Mixing/radiator labels moved clear of the trunk pipe; tank labels shrink to fit.
 
 - **2.8.5** The heating buffer is shaded like a stratified tank: reddish at the top, bluish at the bottom.
 
