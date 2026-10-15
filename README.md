@@ -41,7 +41,7 @@ radiators (**up to 9 TRV-s**).
    `/hacsfiles/luxtronik-heatpump-card/luxtronik-heatpump-card.js`
 
 Manual install: copy `luxtronik-heatpump-card.js` to `/config/www/` and add the resource
-`/local/luxtronik-heatpump-card.js?v=2.12.0` as a **JavaScript module**. Raise the `?v=` number after every update
+`/local/luxtronik-heatpump-card.js?v=2.12.1` as a **JavaScript module**. Raise the `?v=` number after every update
 so the browser doesn't use its cached copy.
 
 Then add the card from the card picker (**Luxtronik Heatpump Card**) and configure it in the visual editor,
@@ -218,6 +218,8 @@ official class depends on the product data sheet.
 | `show_cop` | Hide the whole table with `false` |
 
 ## Changelog
+
+- **2.12.1** The superheat target is no longer displayed; the superheat value turns red when it exceeds the target (or the optional `superheat_limit`). A target above 25 while the value is below 25 is treated as 10x scaled.
 
 - **2.12.0** New optional entities `superheat` / `superheat_target` (shown under the expansion valve) and `defrost_valve` (binary sensor): a defrost bypass valve between the compressor outlet and the evaporator that turns orange with moving dots while it is open.
 

@@ -1,9 +1,9 @@
 /*!
- * Luxtronik Heatpump Card  v2.12.0
+ * Luxtronik Heatpump Card  v2.12.1
  * Maasoojuspumba skeemikaart (Home Assistant + BenPru/luxtronik).
  * Iga andur on valikuline: mida pole seadistatud ega leita, seda ei kuvata.
  */
-const LHC_VERSION = "2.12.0";
+const LHC_VERSION = "2.12.1";
 const W = 1630, D = 190; // D = parempoolse osa nihe (soojuspumba kast on 380 px lai)
 const HOT = "#e5533d", COLD = "#3d8be5", BRINE = "#4fb3d9", MIX = "#f0a030", GROUND = "#a98467", REF_C = "#6c63d9", ELEC = "#f5b700";
 const FX = [1030, 1160, 1290], LP = 72; // termostaatide veergude x ja ridade samm (sama mis radiaatoritel)
@@ -110,7 +110,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
   _maybeBuild() {
     const R = this._resolve();
     this._names = [...this._floor, ...this._rads].map((e) => this._name(e));
-    const sig = JSON.stringify([R, this._floor, this._rads, this._extras, this._names, this._cfg.title, this._cfg.error_ignore, this._cfg.language, this._hass.language, this._copCfg(),
+    const sig = JSON.stringify([R, this._floor, this._rads, this._extras, this._names, this._cfg.title, this._cfg.error_ignore, this._cfg.superheat_limit, this._cfg.language, this._hass.language, this._copCfg(),
       ["show_collector", "show_buffer", "show_dhw", "show_floor", "show_radiators", "show_mixer", "show_delta"].map((k) => this._cfg[k])]);
     if (sig === this._sig) return;
     this._sig = sig;
@@ -136,11 +136,11 @@ class LuxtronikHeatpumpCard extends HTMLElement {
     const lbl = (x, y, s, size = 17, fill = "") => o.push(`<text class="lbl" x="${x}" y="${y}" font-size="${size}"${fill ? ` style="fill:${fill}"` : ""}>${esc(s)}</text>`);
     const pipe = (d, c, m, w = 6) =>
       o.push(`<path d="${d}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"${m ? ` marker-end="url(#m${m})"` : ""}/>`);
-    const val = (x, y, entity, { prefix = "", attr = "", size = 17, bold = false, showOn = "", hideOn = "", fmt = "", anchor = "", row = 0, hideState = 0 } = {}) => {
+    const val = (x, y, entity, { prefix = "", attr = "", size = 17, bold = false, showOn = "", hideOn = "", fmt = "", anchor = "", row = 0, hideState = 0, warn = null } = {}) => {
       if (!entity) return;
       // showOn / hideOn: teise olemi ID – tekst on nähtav ainult siis, kui see olem on "on" / ei ole "on"
       const cond = (showOn ? ` data-show-on="${esc(showOn)}"` : "") + (hideOn ? ` data-hide-on="${esc(hideOn)}"` : "") +
-        (fmt ? ` data-fmt="${fmt}"` : "") + (hideState ? " data-hide-auto=\"1\"" : "") + (anchor ? ` style="text-anchor:${anchor}"` : "");
+        (fmt ? ` data-fmt="${fmt}"` : "") + (hideState ? " data-hide-auto=\"1\"" : "") + (warn && (warn[0] || warn[1]) ? ` data-warn-ent="${esc(warn[0])}" data-warn-lim="${esc(warn[1])}"` : "") + (anchor ? ` style="text-anchor:${anchor}"` : "");
       o.push(`<text class="val${bold ? " b" : ""}${row ? " irow" : ""}" x="${x}" y="${y + 6}" font-size="${size}" data-entity="${esc(entity)}" data-attr="${attr}" data-prefix="${esc(prefix)}"${cond}>…</text>`);
     };
     const delta = (x, y, a, b, on = "") => { // ΔT kahe anduri vahel (nähtav ainult kui mõlemad olemid on valitud)
@@ -232,7 +232,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
     val(457, 157, R.power, { size: 16, bold: true, fmt: "watt", anchor: "start" }); // hetketarbimine W
     o.push(`<path d="M420,628 L460,662 V628 L420,662 Z" fill="var(--card-background-color)" stroke="var(--secondary-text-color)" stroke-width="2.5" stroke-linejoin="round"/>`);
     lbl(440, 684, L.expansion, 10);
-    val(440, 703, R.superheat, { prefix: L.superheat, size: 12 }); val(440, 717, R.superheat_target, { prefix: L.superheat_target, size: 11 });
+    val(440, 706, R.superheat, { prefix: L.superheat, size: 13, warn: [R.superheat_target || "", C.superheat_limit || ""] }); // siht ei ole nähtav; ületamisel läheb punaseks
     if (R.defrost_valve) { // sulatusventiil: kuumgaasi möödavool aurustisse; oranž, kui avatud
       const dv = "M480,210 V300 H395";
       o.push(`<path d="${dv}" fill="none" stroke="#f5a623" stroke-opacity=".25" stroke-width="5" stroke-linejoin="round" stroke-dasharray="3 5"/>`);
@@ -531,6 +531,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
         @keyframes m{from{stroke-dashoffset:0}to{stroke-dashoffset:-20}}
         @keyframes r{from{stroke-dashoffset:0}to{stroke-dashoffset:-9.1}}
         .flow.rf path{stroke-opacity:1;stroke-width:6;stroke-dasharray:.1 9;animation-name:r}
+        .val.alarm{fill:#e53935;font-weight:800}
         .dvalve .vf{fill:var(--card-background-color);stroke:var(--secondary-text-color);stroke-width:2.5}
         .dvalve.on .vf{fill:#f5a623;stroke:#f5a623}
         .pump.comp circle{stroke-width:3}
@@ -595,6 +596,12 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       el.textContent = f === null ? "?" : el.getAttribute("data-prefix") + f;
       const s = st[id];
       el.classList.toggle("heating", !!(s && attr === "current_temperature" && s.attributes.hvac_action === "heating"));
+    });
+    root.querySelectorAll("text.val[data-warn-ent]").forEach((el) => { // väärtus ületab sihti / piiri → punane
+      const v = parseFloat((st[el.getAttribute("data-entity")] || {}).state);
+      let lim = parseFloat(el.getAttribute("data-warn-lim"));
+      if (isNaN(lim)) { lim = parseFloat((st[el.getAttribute("data-warn-ent")] || {}).state); if (lim > 25 && v < 25) lim /= 10; } // Luxtroniku siht võib olla 10× skaalas
+      el.classList.toggle("alarm", !isNaN(v) && !isNaN(lim) && v > lim);
     });
     root.querySelectorAll("text.dlt").forEach((el) => {
       const [a, b] = el.getAttribute("data-delta").split(",");
@@ -688,7 +695,7 @@ const ED_LABELS = {
     brine_in: "Kollektorisse (sisse) temp", brine_out: "Kollektorist (välja) temp", brine_pump: "Kollektori pump",
     status: "Staatus", compressor: "Kompressor", outdoor: "Välistemperatuur", outdoor_avg: "Välistemp. keskmine", hot_gas: "Kuumgaas",
     flow_out: "Pealevool (soojuspumbalt paakidesse)", flow_in: "Tagasivool (paakidest soojuspumbale)", flow_in_target: "Tagasivoolu siht",
-    superheat: "Ülekuumenemine (paisuventiili juures)", superheat_target: "Ülekuumenemise siht", defrost_valve: "Sulatusventiil (binaarandur)", error: "Soojuspumba viga: binaarandur (on = viga, riba näidatakse ainult siis)", error_text: "Vea tekst (tekstiandur, nt Last error)", error_ignore: "Vea olekud, mida ei peeta veaks (komadega eraldatud)", cop: "COP", capacity: "Soojusvõimsus", hours: "Töötunnid", defrost: "Sulatus", additional_heating: "Lisaküte",
+    superheat: "Ülekuumenemine (paisuventiili juures)", superheat_target: "Ülekuumenemise siht (ei näidata; üle selle läheb väärtus punaseks)", superheat_limit: "Ülekuumenemise piir K (valikuline, kasutatakse siht-anduri asemel)", defrost_valve: "Sulatusventiil (binaarandur)", error: "Soojuspumba viga: binaarandur (on = viga, riba näidatakse ainult siis)", error_text: "Vea tekst (tekstiandur, nt Last error)", error_ignore: "Vea olekud, mida ei peeta veaks (komadega eraldatud)", cop: "COP", capacity: "Soojusvõimsus", hours: "Töötunnid", defrost: "Sulatus", additional_heating: "Lisaküte",
     heating_pump: "Kütte ringluspump", buffer_temp: "Kütte akupaagi temperatuur", buffer_target: "Kütte akupaagi siht",
     dhw_temp: "Tarbevee temperatuur", dhw_target: "Tarbevee siht", dhw_mode: "Tarbevee režiim", dhw_pump: "Tarbevee pump",
     mix_flow: "Segamissõlm: pealevool", mix_target: "Segamissõlm: siht", mix_return: "Segamissõlm: põranda tagasivool", mix_pump: "Segamisringi pump", heating_mode: "Kütte režiim",
@@ -710,7 +717,7 @@ const ED_LABELS = {
     brine_in: "Ground loop in temp", brine_out: "Ground loop out temp", brine_pump: "Brine pump",
     status: "Status", compressor: "Compressor", outdoor: "Outdoor temperature", outdoor_avg: "Outdoor temp. average", hot_gas: "Hot gas",
     flow_out: "Flow (heat pump → tanks)", flow_in: "Return (tanks → heat pump)", flow_in_target: "Return target",
-    superheat: "Superheat (at the expansion valve)", superheat_target: "Superheat target", defrost_valve: "Defrost valve (binary sensor)", error: "Heat pump error: binary sensor (on = error, banner shown only then)", error_text: "Error text (text sensor, e.g. Last error)", error_ignore: "Error states to treat as normal (comma-separated)", cop: "COP", capacity: "Heating capacity", hours: "Operating hours", defrost: "Defrost", additional_heating: "Auxiliary heater",
+    superheat: "Superheat (at the expansion valve)", superheat_target: "Superheat target (not shown; the value turns red above it)", superheat_limit: "Superheat limit in K (optional, used instead of the target sensor)", defrost_valve: "Defrost valve (binary sensor)", error: "Heat pump error: binary sensor (on = error, banner shown only then)", error_text: "Error text (text sensor, e.g. Last error)", error_ignore: "Error states to treat as normal (comma-separated)", cop: "COP", capacity: "Heating capacity", hours: "Operating hours", defrost: "Defrost", additional_heating: "Auxiliary heater",
     heating_pump: "Heating circulation pump", buffer_temp: "Buffer tank temperature", buffer_target: "Buffer tank target",
     dhw_temp: "DHW temperature", dhw_target: "DHW target", dhw_mode: "DHW mode", dhw_pump: "DHW pump",
     mix_flow: "Mixing valve: flow", mix_target: "Mixing valve: target", mix_return: "Mixing valve: floor return", mix_pump: "Mixing circuit pump", heating_mode: "Heating mode",
@@ -753,7 +760,7 @@ class LuxtronikHeatpumpCardEditor extends HTMLElement {
       grp(T.g_sections, ["show_collector", "show_buffer", "show_dhw", "show_floor", "show_radiators", "show_mixer", "show_delta", "show_cop"].map((n) => ({ name: n, selector: { boolean: {} } }))),
       grp(T.g_col, [e("brine_in", S), e("brine_out", S), e("brine_pump", B), e("source_flow_rate", S)]),
       grp(T.g_pipe, [e("flow_out", S), e("flow_in", S), e("flow_in_target", S), e("heating_pump", B), e("heat_flow_rate", S)]),
-      grp(T.g_hp, [e("status", S), e("compressor", B), e("outdoor", S), e("outdoor_avg", S), e("hot_gas", S), e("power", S), e("low_pressure", S), e("high_pressure", S), e("cop", S), e("capacity", S), e("hours", S), e("defrost", B), e("additional_heating", B), e("superheat", S), e("superheat_target", S), e("defrost_valve", B), e("error", undefined), e("error_text", undefined), { name: "error_ignore", selector: { text: {} } }]),
+      grp(T.g_hp, [e("status", S), e("compressor", B), e("outdoor", S), e("outdoor_avg", S), e("hot_gas", S), e("power", S), e("low_pressure", S), e("high_pressure", S), e("cop", S), e("capacity", S), e("hours", S), e("defrost", B), e("additional_heating", B), e("superheat", S), e("superheat_target", S), { name: "superheat_limit", selector: { number: { min: 0, max: 50, step: 0.1, mode: "box" } } }, e("defrost_valve", B), e("error", undefined), e("error_text", undefined), { name: "error_ignore", selector: { text: {} } }]),
       grp(T.g_tanks, [e("buffer_temp", S), e("buffer_target", N), e("dhw_temp", S), e("dhw_target", N), e("dhw_mode", CL), e("dhw_pump", B)]),
       grp(T.g_mix, [e("mix_flow", S), e("mix_target", N), e("mix_return", S), e("mix_pump", B), e("heating_mode", CL)]),
       grp(T.g_radcircuit, [e("rad_flow", S), e("rad_return", S), e("rad_pump", B)]),
