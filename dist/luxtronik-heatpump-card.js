@@ -1,9 +1,9 @@
 /*!
- * Luxtronik Heatpump Card  v2.10.3
+ * Luxtronik Heatpump Card  v2.10.4
  * Maasoojuspumba skeemikaart (Home Assistant + BenPru/luxtronik).
  * Iga andur on valikuline: mida pole seadistatud ega leita, seda ei kuvata.
  */
-const LHC_VERSION = "2.10.3";
+const LHC_VERSION = "2.10.4";
 const W = 1630, D = 190; // D = parempoolse osa nihe (soojuspumba kast on 380 px lai)
 const HOT = "#e5533d", COLD = "#3d8be5", BRINE = "#4fb3d9", MIX = "#f0a030", GROUND = "#a98467", REF_C = "#6c63d9", ELEC = "#f5b700";
 const FX = [1030, 1160, 1290], LP = 72; // termostaatide veergude x ja ridade samm (sama mis radiaatoritel)
@@ -603,14 +603,16 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       const isBin = (id) => /^(binary_sensor|switch)\./.test(id);
       const ign = ["", "unknown", "unavailable", "none", "no error", "no errors", "ok", "off", "0", "-", "normal", "false", "ei ole", "puudub"]
         .concat((g.getAttribute("data-ignore") || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean));
-      const txtOf = (id) => { const s = st[id]; const v = s ? String(s.state).trim() : ""; return ign.includes(v.toLowerCase()) ? "" : v; };
+      const pretty = (s) => { try { return typeof this._hass.formatEntityState === "function" ? String(this._hass.formatEntityState(s)) : String(s.state); } catch (e) { return String(s.state); } }; // HA tõlgitud olek (nt kood 723 → tekst)
+      const txtOf = (id) => { const s = st[id]; const v = s ? String(s.state).trim() : ""; return ign.includes(v.toLowerCase()) ? "" : pretty(s).trim(); };
       const bin = bid && isBin(bid) ? bid : "", txt = tid || (bid && !isBin(bid) ? bid : "");
       let msg = null;
       if (bin) {
         const b = st[bin];
         if (b && b.state === "on") { // viga on: tekstianduri olek näidatakse sõna-sõnalt
-          const t = txt && st[txt] ? String(st[txt].state).trim() : "";
-          msg = (t && !["unknown", "unavailable"].includes(t.toLowerCase()) ? t : "") || b.attributes.friendly_name || bin;
+          const raw = txt && st[txt] ? String(st[txt].state).trim() : "";
+          const t = raw && !["unknown", "unavailable"].includes(raw.toLowerCase()) ? pretty(st[txt]).trim() : "";
+          msg = t || b.attributes.friendly_name || bin;
         }
       } else if (txt) msg = txtOf(txt) || null;
       g.style.display = msg ? "" : "none";
