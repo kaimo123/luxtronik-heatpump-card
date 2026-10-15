@@ -1,3 +1,5 @@
+<p align="center"><img src="images/icon.svg" width="96" alt="Luxtronik Heatpump Card"></p>
+
 # Luxtronik Heatpump Card
 
 A Home Assistant Lovelace card that draws a live schematic of a ground-source heat pump system, with a
