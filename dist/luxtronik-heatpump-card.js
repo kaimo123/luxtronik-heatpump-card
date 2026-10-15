@@ -1,9 +1,9 @@
 /*!
- * Luxtronik Heatpump Card  v2.8.4
+ * Luxtronik Heatpump Card  v2.8.5
  * Maasoojuspumba skeemikaart (Home Assistant + BenPru/luxtronik).
  * Iga andur on valikuline: mida pole seadistatud ega leita, seda ei kuvata.
  */
-const LHC_VERSION = "2.8.4";
+const LHC_VERSION = "2.8.5";
 const W = 1630, D = 190; // D = parempoolse osa nihe (soojuspumba kast on 380 px lai)
 const HOT = "#e5533d", COLD = "#3d8be5", BRINE = "#4fb3d9", MIX = "#f0a030", GROUND = "#a98467", REF_C = "#6c63d9", ELEC = "#f5b700";
 const FX = [1030, 1160, 1290], LP = 72; // termostaatide veergude x ja ridade samm (sama mis radiaatoritel)
@@ -183,6 +183,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       o.push(`<marker id="m${n}" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${c}"/></marker>`));
     [["gE", BRINE, COLD, 285, 560], ["gC", COLD, HOT, 560, 285], ["gB", HOT, COLD, 285, 345], ["gD", HOT, COLD, 480, 560]].forEach(([id, a, b, y1, y2]) =>
       o.push(`<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="0" y1="${y1}" x2="0" y2="${y2}"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient>`));
+    o.push(`<linearGradient id="gT" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${HOT}"/><stop offset="1" stop-color="${COLD}"/></linearGradient>`);
     o.push("</defs>");
 
     /* --- välistemperatuur maakollektori kohal --- */
@@ -271,7 +272,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
     const names = this._names || [];
     const nameOf = (list, i, offset) => names[offset + i] || list[i].entity;
     if (bufOn) {
-      box(640, 90, 120, 280, HOT, 14, 0.1, R.buffer_temp ? `data-fill="${esc(R.buffer_temp)}"` : "");
+      box(640, 90, 120, 280, "url(#gT)", 14, 0.3); // kihistunud paak: üleval kuum (punakas), all külm (sinakas)
       lbl(700, 138, L.buffer, 13);
       pipe("M640,285 H725 V345 H640", "url(#gB)"); flow(own(HPm), ["M640,285 H725 V345 H640"]); // soojuspumba ring paagi sees
       val(700, 196, R.buffer_temp, { prefix: L.temp, size: 19, bold: true }); val(700, 238, R.buffer_target, { prefix: L.target });
