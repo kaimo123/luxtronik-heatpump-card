@@ -1,11 +1,11 @@
 /*!
- * Luxtronik Heatpump Card  v2.7.1
+ * Luxtronik Heatpump Card  v2.8.0
  * Maasoojuspumba skeemikaart (Home Assistant + BenPru/luxtronik).
  * Iga andur on valikuline: mida pole seadistatud ega leita, seda ei kuvata.
  */
-const LHC_VERSION = "2.7.1";
-const W = 1460, D = 60; // D = parempoolse osa nihe
-const HOT = "#e5533d", COLD = "#3d8be5", BRINE = "#4fb3d9", MIX = "#f0a030", GROUND = "#a98467";
+const LHC_VERSION = "2.8.0";
+const W = 1700, D = 260; // D = parempoolse osa nihe (soojuspumba kast on 450 px lai)
+const HOT = "#e5533d", COLD = "#3d8be5", BRINE = "#4fb3d9", MIX = "#f0a030", GROUND = "#a98467", REF_C = "#6c63d9", ELEC = "#f5b700";
 const FX = [1030, 1160, 1290], LP = 88; // termostaatide veergude x ja ridade samm (sama mis radiaatoritel)
 const MAX_ITEMS = 9;                     // max termostaate põrandal / radiaatoritel
 const COP_CATS = ["heating", "dhw", "total"], COP_PERIODS = ["h24", "d7", "month", "year"];
@@ -33,6 +33,7 @@ const I18N = {
     capacity: "Võimsus: ", hours: "Töötunde: ", defrost: "Sulatus: ", additional_heating: "Lisaküte: ",
     flow: "Pealevool ", return: "Tagasivool ", target: "Siht ", temp: "Temp ", water: "Vesi ",
     floor_n: "Põrand ", rad_n: "Radiaator ", floor_return: "Põrandalt ",
+    evaporator: "AURUSTI", condenser: "KONDENSAATOR", expansion: "PAISUTUSVENTIIL", low_pressure: "Madalrõhk ", high_pressure: "Kõrgrõhk ",
   },
   en: {
     collector: "GROUND LOOP", heatpump: "HEAT PUMP", buffer: "HEATING BUFFER", dhw: "DHW TANK",
@@ -42,6 +43,7 @@ const I18N = {
     capacity: "Capacity: ", hours: "Hours: ", defrost: "Defrost: ", additional_heating: "Aux heater: ",
     flow: "Flow ", return: "Return ", target: "Target ", temp: "Temp ", water: "Water ",
     floor_n: "Floor ", rad_n: "Radiator ", floor_return: "Floor return ",
+    evaporator: "EVAPORATOR", condenser: "CONDENSER", expansion: "EXPANSION VALVE", low_pressure: "Low pressure ", high_pressure: "High pressure ",
   },
 };
 
@@ -51,7 +53,7 @@ const ALL_KEYS = [
   "flow_out", "flow_in", "flow_in_target", "cop", "capacity", "hours", "defrost", "additional_heating",
   "heating_pump", "buffer_temp", "buffer_target", "dhw_temp", "dhw_target", "dhw_mode", "dhw_pump",
   "mix_flow", "mix_target", "mix_return", "mix_pump", "heating_mode",
-  "rad_pump", "rad_flow", "rad_return", "heat_flow_rate", "source_flow_rate",
+  "rad_pump", "rad_flow", "rad_return", "heat_flow_rate", "source_flow_rate", "power", "low_pressure", "high_pressure",
 ];
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -74,7 +76,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
 
   set hass(h) { this._hass = h; if (this._cfg) { this._maybeBuild(); this._update(); this._copFetch(false); } }
   connectedCallback() { if (this._cfg && this._hass) this._copFetch(false); }
-  getCardSize() { return 8; }
+  getCardSize() { return 10; }
 
   static getConfigElement() { return document.createElement("luxtronik-heatpump-card-editor"); }
   static getStubConfig() { return { floor: [], radiators: [] }; }
@@ -129,25 +131,31 @@ class LuxtronikHeatpumpCard extends HTMLElement {
     const box = (x, y, w, h, c, r = 14, op = 0.1, extra = "") =>
       o.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${c}" fill-opacity="${op}" stroke="${c}" stroke-opacity=".7" stroke-width="2" ${extra}/>`);
     const nm = (x, y, s, size = 14) => o.push(`<text class="nm" x="${x}" y="${y}" font-size="${size}"><title>${esc(s)}</title>${esc(cut(s, 15))}</text>`);
-    const lbl = (x, y, s, size = 17) => o.push(`<text class="lbl" x="${x}" y="${y}" font-size="${size}">${esc(s)}</text>`);
+    const lbl = (x, y, s, size = 17, fill = "") => o.push(`<text class="lbl" x="${x}" y="${y}" font-size="${size}"${fill ? ` style="fill:${fill}"` : ""}>${esc(s)}</text>`);
     const pipe = (d, c, m, w = 6) =>
       o.push(`<path d="${d}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"${m ? ` marker-end="url(#m${m})"` : ""}/>`);
-    const val = (x, y, entity, { prefix = "", attr = "", size = 17, bold = false, showOn = "", hideOn = "" } = {}) => {
+    const val = (x, y, entity, { prefix = "", attr = "", size = 17, bold = false, showOn = "", hideOn = "", fmt = "", anchor = "" } = {}) => {
       if (!entity) return;
       // showOn / hideOn: teise olemi ID – tekst on nähtav ainult siis, kui see olem on "on" / ei ole "on"
-      const cond = (showOn ? ` data-show-on="${esc(showOn)}"` : "") + (hideOn ? ` data-hide-on="${esc(hideOn)}"` : "");
+      const cond = (showOn ? ` data-show-on="${esc(showOn)}"` : "") + (hideOn ? ` data-hide-on="${esc(hideOn)}"` : "") +
+        (fmt ? ` data-fmt="${fmt}"` : "") + (anchor ? ` style="text-anchor:${anchor}"` : "");
       o.push(`<text class="val${bold ? " b" : ""}" x="${x}" y="${y + 6}" font-size="${size}" data-entity="${esc(entity)}" data-attr="${attr}" data-prefix="${esc(prefix)}"${cond}>…</text>`);
     };
     const pump = (x, y, entity, rot = 0) => { // rot: 0 = paremale, 180 = vasakule
       if (!entity) return;
       o.push(`<g class="pump" data-entity="${esc(entity)}" transform="translate(${x},${y}) rotate(${rot})"><circle r="17"/><path d="M-6,-8 L9,0 L-6,8 Z"/></g>`);
     };
-    const flow = (entity, paths) => {
-      if (!entity || !paths.length) return;
-      o.push(`<g class="flow" data-flow="${esc(entity)}" pointer-events="none">${paths.map((d) => `<path d="${d}"/>`).join("")}</g>`);
+    /* Voolu täpid: iga toruosa joonistatakse ÜKS kord ja see liigub, kui VÄHEMALT ÜKS teda ringlev pump töötab
+       (owners = pumpade olemid). Nii ei teki kattuvaid, erifaasis täppe ja iga olukord on õige. */
+    const own = (...e) => [...new Set(e.flat().filter(Boolean))];
+    const flow = (owners, paths, cls = "", color = "") => {
+      const ids = own(owners);
+      if (!ids.length || !paths.length) return;
+      o.push(`<g class="flow${cls ? " " + cls : ""}" data-flow="${ids.map(esc).join(",")}" pointer-events="none">${paths.map((d) => `<path d="${d}"${color ? ` style="stroke:${color}"` : ""}/>`).join("")}</g>`);
     };
+    const HPm = R.heating_pump, DPm = R.dhw_pump;
+    const floorOwn = own(R.mix_pump || HPm), radOwn = own(R.rad_pump || HPm);
 
-    // radiaatorite read: ainult nii palju, kui valitud olemeid on (3 tk reas)
     // põrandakütte maht: kompaktsed plaadid (3 reas), nagu radiaatoritel; plaadirida asub kahe toru vahel
     const Y0 = 110;                                // põranda pealevoolutoru y (samal kõrgusel akupaagi väljundiga)
     const nFR = Math.max(1, Math.ceil(this._floor.length / 3));
@@ -162,57 +170,87 @@ class LuxtronikHeatpumpCard extends HTMLElement {
     const nRows = radOn ? Math.max(1, Math.ceil(this._rads.length / 3)) : 0;
     const RY = [0, 112, 224].slice(0, nRows).map((d) => RB + 60 + d);
     const RET_BOTTOM = nRows ? RY[nRows - 1] + 116 : 850; // radiaatorite tagasivoolu põhitoru y
-    const H = Math.max(650, dhwOn ? 720 : 0, floorOn ? FLOOR_BOTTOM + 30 : 0, nRows ? RET_BOTTOM + 40 : 0);
+    const H = Math.max(780, floorOn ? FLOOR_BOTTOM + 30 : 0, nRows ? RET_BOTTOM + 40 : 0);
     o.push(`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"><defs>`);
-    [["h", HOT], ["c", COLD], ["b", BRINE]].forEach(([n, c]) =>
+    [["h", HOT], ["c", COLD], ["b", BRINE], ["e", ELEC]].forEach(([n, c]) =>
       o.push(`<marker id="m${n}" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${c}"/></marker>`));
+    [["gE", BRINE, COLD, 285, 560], ["gC", COLD, HOT, 560, 285], ["gB", HOT, COLD, 285, 345], ["gD", HOT, COLD, 480, 560]].forEach(([id, a, b, y1, y2]) =>
+      o.push(`<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="0" y1="${y1}" x2="0" y2="${y2}"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient>`));
     o.push("</defs>");
 
+    /* --- välistemperatuur maakollektori kohal --- */
+    val(80, 172, R.outdoor, { prefix: L.outdoor, size: 16, bold: true });
+    val(80, 194, R.outdoor_avg, { prefix: L.outdoor_avg, size: 13 });
+
     /* --- maakollektor --- */
+    const evapSerp = "M290,285 H375 V340 H305 V395 H375 V450 H305 V505 H375 V560 H290";
+    const brineLoop = "M290,560 H45 V505 H115 V450 H45 V395 H115 V340 H45 V285 H375 V340 H305 V395 H375 V450 H305 V505 H375 V560 H290"; // suletud kontuur
     if (colOn) {
-      box(20, 150, 180, 450, GROUND); lbl(110, 180, L.collector);
-      pipe("M200,270 H50 V306 H180 V342 H50 V378 H180 V414 H50 V450 H200", GROUND, null, 5);
-      pipe("M200,270 H340", BRINE, "b"); pipe("M340,450 H200", COLD, "c");
-      flow(R.brine_pump, ["M200,270 H340", "M340,450 H50 V414 H180 V378 H50 V342 H180 V306 H50 V270 H200"]);
-      pump(270, 450, R.brine_pump, 180); // toru liigub vasakule (soojuspumbalt kollektorisse)
-      val(270, 245, R.brine_in, { prefix: L.brine_in }); val(270, 492, R.brine_out, { prefix: L.brine_out });
+      box(20, 215, 120, 400, GROUND); lbl(80, 243, L.collector, 12);
+      pipe("M140,285 H45 V340 H115 V395 H45 V450 H115 V505 H45 V560 H140", GROUND, null, 5);
+      pipe("M140,285 H290", BRINE, "b"); pipe("M290,560 H140", COLD, "c");
+      flow([R.brine_pump], [brineLoop]);
+      pump(195, 560, R.brine_pump, 180); // toru liigub vasakule (soojuspumbalt kollektorisse)
+      val(195, 262, R.brine_in, { prefix: L.brine_in }); val(195, 598, R.brine_out, { prefix: L.brine_out });
       // kollektori läbivool – ainult siis, kui kollektori pump töötab
-      val(270, 418, R.source_flow_rate, { size: 15, showOn: R.brine_pump || "" });
+      val(195, 527, R.source_flow_rate, { size: 14, showOn: R.brine_pump || "" });
     }
 
-    /* --- soojuspump --- */
-    box(340, 150, 200, 450, "#888"); lbl(440, 178, L.heatpump);
-    const rows = [["status", "", true], ["compressor"], ["outdoor"], ["outdoor_avg"], ["hot_gas"], ["flow_in_target"],
-                  ["cop", "", true], ["capacity"], ["hours"], ["defrost"], ["additional_heating"]]
+    /* --- soojuspump: külmaring (aurusti → kompressor → kondensaator → paisutusventiil) --- */
+    const condSerp = "M660,560 H575 V505 H645 V450 H575 V395 H645 V340 H575 V285 H660";
+    box(250, 90, 450, 655, "#888"); lbl(475, 116, L.heatpump, 15);
+    box(290, 245, 100, 355, COLD, 10, 0.1); box(560, 245, 100, 355, HOT, 10, 0.1);
+    pipe(evapSerp, "url(#gE)"); pipe(condSerp, "url(#gC)");
+    lbl(340, 266, L.evaporator, 12, COLD); lbl(610, 266, L.condenser, 10, HOT);
+    const ref = (d, c) => { // külmaaine: nõrk taust + (kompressori töötades) liikuvad värvilised täpid
+      o.push(`<path d="${d}" fill="none" stroke="${c}" stroke-opacity=".28" stroke-width="6" stroke-linejoin="round"/>`);
+      if (R.compressor) flow([R.compressor], [d], "rf", c);
+      else o.push(`<path d="${d}" fill="none" stroke="${c}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="0.1 9"/>`);
+    };
+    ref("M340,245 V210 H445", REF_C); ref("M505,210 H610 V245", HOT);
+    ref("M610,600 V645 H495", HOT); ref("M455,645 H340 V600", REF_C);
+    [["333,236 347,236 340,223", REF_C], ["405,203 405,217 419,210", REF_C], ["555,203 555,217 569,210", HOT], ["603,227 617,227 610,240", HOT],
+     ["603,617 617,617 610,631", HOT], ["553,638 553,652 539,645", HOT], ["413,638 413,652 399,645", REF_C], ["333,627 347,627 340,613", REF_C]]
+      .forEach(([p, c]) => o.push(`<polygon points="${p}" fill="${c}"/>`));
+    // kompressor (roheline kui töötab)
+    o.push(`<g class="pump comp" ${R.compressor ? `data-entity="${esc(R.compressor)}" ` : ""}transform="translate(475,210)"><circle r="30"/><path d="M-16,-8 Q0,-19 16,-8 M-16,8 Q0,19 16,8"/></g>`);
+    if (R.power || R.compressor) pipe("M475,132 V170", ELEC, "e", 5);      // elektri sisend
+    val(492, 157, R.power, { size: 16, bold: true, fmt: "watt", anchor: "start" }); // hetketarbimine W
+    o.push(`<path d="M455,628 L495,662 V628 L455,662 Z" fill="var(--card-background-color)" stroke="var(--secondary-text-color)" stroke-width="2.5" stroke-linejoin="round"/>`);
+    lbl(475, 684, L.expansion, 10);
+    val(565, 188, R.hot_gas, { prefix: L.hot_gas, size: 14 });
+    val(340, 716, R.low_pressure, { prefix: L.low_pressure, size: 13 }); val(610, 716, R.high_pressure, { prefix: L.high_pressure, size: 13 });
+    const rows = [["status", "", true], ["compressor"], ["cop", "", true], ["capacity"], ["hours"], ["defrost"], ["additional_heating"]]
       .filter(([k]) => R[k]).map(([k, , b]) => ({ id: R[k], prefix: k === "status" ? "" : L[k], bold: !!b }));
     this._extras.forEach((e) => {
       const st = this._hass.states[e.entity];
       rows.push({ id: e.entity, prefix: (e.name || (st && st.attributes.friendly_name) || "") + (e.name === "" ? "" : ": ") });
     });
-    const step = rows.length > 1 ? Math.min(36, (575 - 208) / (rows.length - 1)) : 0;
-    rows.forEach((r, i) => val(440, 208 + i * step, r.id, { prefix: r.prefix, bold: r.bold }));
+    const step = rows.length > 1 ? Math.min(34, (590 - 308) / (rows.length - 1)) : 0;
+    rows.forEach((r, i) => val(475, 308 + i * step, r.id, { prefix: r.prefix, bold: r.bold }));
 
     /* --- ühine pea- ja tagasivoolutoru soojuspumbalt mõlemale paagile --- */
-    const hpOut = R.flow_out, hpIn = R.flow_in;
     if (bufOn || dhwOn) {
       if (bufOn && dhwOn) {
-        pipe("M540,200 H700", HOT, "h"); pipe("M640,200 V480 H700", HOT, "h");
-        pipe("M700,560 H540", COLD, "c"); pipe(`M700,330 H${640 + 8} A8,8 0 0 0 ${640 - 8},330 H590 V560`, COLD);
-        flow(R.heating_pump, ["M540,200 H700", `M700,330 H648 A8,8 0 0 0 632,330 H590 V560 H540`]);
-        flow(R.dhw_pump, ["M640,200 V480 H700", "M700,560 H540"]);
+        pipe("M660,285 H900", HOT, "h"); pipe("M840,285 V480 H900", HOT, "h");
+        pipe("M900,560 H660", COLD, "c"); pipe("M900,345 H848 A8,8 0 0 0 832,345 H750 V560", COLD);
+        flow(own(HPm, DPm), ["M660,285 H840"]); flow(own(HPm), ["M840,285 H900"]); flow(own(DPm), ["M840,285 V480 H900"]);
+        flow(own(DPm), ["M900,560 H750"]); flow(own(HPm, DPm), ["M750,560 H660"]); flow(own(HPm), ["M900,345 H848 A8,8 0 0 0 832,345 H750 V560"]);
+        flow(own(HPm, DPm), [condSerp]);
       } else if (bufOn) {
-        pipe("M540,200 H700", HOT, "h"); pipe("M700,330 H590 V560 H540", COLD, "c");
-        flow(R.heating_pump, ["M540,200 H700", "M700,330 H590 V560 H540"]);
+        pipe("M660,285 H900", HOT, "h"); pipe("M900,345 H750 V560 H660", COLD, "c");
+        flow(own(HPm), ["M660,285 H900", "M900,345 H750 V560 H660", condSerp]);
       } else {
-        pipe("M540,200 H640 V480 H700", HOT, "h"); pipe("M700,560 H540", COLD, "c");
-        flow(R.dhw_pump, ["M540,200 H640 V480 H700", "M700,560 H540"]);
+        pipe("M660,285 H840 V480 H900", HOT, "h"); pipe("M900,560 H660", COLD, "c");
+        flow(own(DPm), ["M660,285 H840 V480 H900", "M900,560 H660", condSerp]);
       }
-      pump(590, 200, R.heating_pump);
-      if (dhwOn) pump(670, 480, R.dhw_pump);
+      pump(770, 285, HPm);
+      if (dhwOn) pump(870, 480, DPm);
       // soojushulga läbivool: tarbevee pumba juures kui tarbevett tehakse, muul ajal kütte pumba juures
-      if (bufOn) val(590, 234, R.heat_flow_rate, { size: 15, showOn: R.heating_pump || "", hideOn: R.dhw_pump || "" });
-      if (dhwOn) val(668, 518, R.heat_flow_rate, { size: 15, showOn: R.dhw_pump || "" });
-      val(620, 160, hpOut, { prefix: L.flow, bold: true }); val(620, 592, hpIn, { prefix: L.return, bold: true });
+      if (bufOn) val(770, 322, R.heat_flow_rate, { size: 15, showOn: HPm || "", hideOn: DPm || "" });
+      if (dhwOn) val(868, 518, R.heat_flow_rate, { size: 15, showOn: DPm || "" });
+      val(775, 252, R.flow_out, { prefix: L.flow, bold: true }); val(775, 590, R.flow_in, { prefix: L.return, bold: true });
+      val(775, 612, R.flow_in_target, { prefix: L.flow_in_target, size: 13 });
     }
 
     /* --- parempoolne osa (nihutatud) --- */
@@ -221,14 +259,16 @@ class LuxtronikHeatpumpCard extends HTMLElement {
     const nameOf = (list, i, offset) => names[offset + i] || list[i].entity;
     if (bufOn) {
       box(640, 90, 120, 280, HOT, 14, 0.1, R.buffer_temp ? `data-fill="${esc(R.buffer_temp)}"` : "");
-      lbl(700, 138, L.buffer, 14);
-      val(700, 190, R.buffer_temp, { prefix: L.temp, size: 19, bold: true }); val(700, 232, R.buffer_target, { prefix: L.target });
+      lbl(700, 138, L.buffer, 13);
+      pipe("M640,285 H725 V345 H640", "url(#gB)"); flow(own(HPm), ["M640,285 H725 V345 H640"]); // soojuspumba ring paagi sees
+      val(700, 196, R.buffer_temp, { prefix: L.temp, size: 19, bold: true }); val(700, 238, R.buffer_target, { prefix: L.target });
     }
     if (dhwOn) {
       box(640, 430, 120, 260, HOT, 14, 0.1, R.dhw_temp ? `data-fill="${esc(R.dhw_temp)}"` : "");
-      lbl(700, 458, L.dhw, 14);
-      val(700, 520, R.dhw_temp, { prefix: L.water, size: 19, bold: true }); val(700, 562, R.dhw_target, { prefix: L.target });
-      val(700, 604, R.dhw_mode);
+      lbl(700, 458, L.dhw, 12);
+      pipe("M640,480 H730 V507 H660 V534 H730 V560 H640", "url(#gD)"); flow(own(DPm), ["M640,480 H730 V507 H660 V534 H730 V560 H640"]); // spiraal
+      val(700, 606, R.dhw_temp, { prefix: L.water, size: 19, bold: true }); val(700, 640, R.dhw_target, { prefix: L.target });
+      val(700, 670, R.dhw_mode);
     }
     const loads = floorOn || radOn;
     const supTrunkEnd = radOn ? RY[0] : Y0;
@@ -251,8 +291,6 @@ class LuxtronikHeatpumpCard extends HTMLElement {
         val(885, Y0 + 100, R.heating_mode);
         val(885, FLOOR_Y + 30, R.mix_return, { prefix: L.floor_return });
       }
-      // põrandakütte voolu animatsioon (tagasivool jätkub akupaagini, kui radiaatoreid pole)
-      flow(R.mix_pump, [`${serp.replace(`M940,${Y0}`, `M760,${Y0}`).replace(/ H940$/, "")} H800 V340${radOn ? "" : " H760"}`]);
       // kompaktsed plaadid, 3 reas – sama kujundus kui radiaatoritel
       this._floor.forEach((f, n) => {
         const ys = FYs[Math.floor(n / 3)], cx = FX[n % 3];
@@ -284,20 +322,22 @@ class LuxtronikHeatpumpCard extends HTMLElement {
         val(cx, ys + 65, r.entity, { attr: "temperature", prefix: "→ ", size: 14 });
       });
     }
+    /* --- voolu täpid kütteringides (iga toruosa ühe korra; omanikud = pumbad, mis seda toru läbi ajavad) --- */
     if (bufOn && loads) {
-      const p = [`M760,110 H830 V${supTrunkEnd}`];
+      const trunkOwn = own(floorOn ? floorOwn : [], radOn ? radOwn : []);
+      flow(trunkOwn, ["M760,110 H830", "M800,340 H760"]);              // puhvri väljund ja ühine tagasivool puhvrisse
+      if (floorOn) flow(floorOwn, [`${serp.replace(`M940,${Y0}`, `M830,${Y0}`).replace(/ H940$/, "")} H838 A8,8 0 0 0 822,${FLOOR_Y} H800 V340`]);
       if (radOn) {
         const y0 = RY[0], yl = RY[nRows - 1], xs = 960, xr = 1362;
-        const rp = [`M830,${y0} H1340`];
+        const rp = [`M830,${Y0} V${y0}`, `M830,${y0} H1340`];
         if (nRows > 1) rp.push(`M${xs},${y0} V${yl}`);
         RY.slice(1).forEach((ys) => rp.push(`M${xs},${ys} H1340`));
         this._rads.forEach((r, n) => { const ys = RY[Math.floor(n / 3)], cx = FX[n % 3]; rp.push(`M${cx},${ys} V${ys + 12}`, `M${cx},${ys + 76} V${ys + 88}`); });
         RY.forEach((ys) => rp.push(`M1000,${ys + 88} H${xr}`));
-        rp.push(`M${xr},${y0 + 88} V${RET_BOTTOM} H800 V340 H760`);   // tagasivool: radiaatoritelt akupaaki
-        if (R.rad_pump) flow(R.rad_pump, [`M760,110 H830 V${supTrunkEnd}`, ...rp]); else p.push(...rp);       // oma pump → oma animatsioon
+        rp.push(`M${xr},${y0 + 88} V${RET_BOTTOM} H800 V340`);
+        flow(radOwn, rp);
         pump(885, y0, R.rad_pump);
       }
-      flow(R.heating_pump, p);
     }
     o.push("</g></svg>");
     return o.join("");
@@ -445,6 +485,11 @@ class LuxtronikHeatpumpCard extends HTMLElement {
         .flow path{fill:none;stroke:#fff;stroke-opacity:.9;stroke-width:3;stroke-linecap:round;
                    stroke-dasharray:2 18;animation:m 1.2s linear infinite}
         @keyframes m{from{stroke-dashoffset:0}to{stroke-dashoffset:-20}}
+        @keyframes r{from{stroke-dashoffset:0}to{stroke-dashoffset:-9.1}}
+        .flow.rf path{stroke-opacity:1;stroke-width:6;stroke-dasharray:.1 9;animation-name:r}
+        .pump.comp circle{stroke-width:3}
+        .pump.comp path{fill:none;stroke:var(--secondary-text-color);stroke-width:3;stroke-linecap:round}
+        .pump.comp.on path{stroke:var(--success-color,#4caf50);fill:none}
         .copbox{padding:4px 8px 4px}
         .coptbl{width:100%;border-collapse:collapse;text-align:center}
         .coptbl th{color:var(--secondary-text-color);font-weight:500;font-size:13px;padding:4px 6px}
@@ -466,9 +511,16 @@ class LuxtronikHeatpumpCard extends HTMLElement {
     });
   }
 
-  _fmt(id, attr) {
+  _fmt(id, attr, fmt) {
     const s = this._hass.states[id];
     if (!s) return null;
+    if (fmt === "watt") { // hetketarbimine alati vattides (kW ja MW teisendatakse)
+      if (["unavailable", "unknown", ""].includes(s.state)) return "—";
+      const n = Number(s.state);
+      if (isNaN(n)) return s.state;
+      const u = String(s.attributes.unit_of_measurement || "W").toLowerCase();
+      return `${Math.round(n * (u === "kw" ? 1e3 : u === "mw" ? 1e6 : 1)).toLocaleString()} W`;
+    }
     const unit = (this._hass.config && this._hass.config.unit_system && this._hass.config.unit_system.temperature) || "°C";
     if (attr) {
       const v = s.attributes[attr];
@@ -488,7 +540,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
     const st = this._hass.states, root = this.shadowRoot;
     root.querySelectorAll("text.val").forEach((el) => {
       const id = el.getAttribute("data-entity"), attr = el.getAttribute("data-attr");
-      const f = this._fmt(id, attr);
+      const f = this._fmt(id, attr, el.getAttribute("data-fmt"));
       el.classList.toggle("missing", f === null);
       el.textContent = f === null ? "?" : el.getAttribute("data-prefix") + f;
       const s = st[id];
@@ -504,8 +556,8 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       el.classList.toggle("on", !!s && s.state === "on");
     });
     root.querySelectorAll("g.flow").forEach((el) => {
-      const s = st[el.getAttribute("data-flow")];
-      el.classList.toggle("on", !!s && s.state === "on");
+      const on = el.getAttribute("data-flow").split(",").some((id) => st[id] && st[id].state === "on");
+      el.classList.toggle("on", on);
     });
     root.querySelectorAll("rect[data-fill]").forEach((el) => {
       const s = st[el.getAttribute("data-fill")], t = s ? parseFloat(s.state) : NaN;
@@ -531,6 +583,7 @@ const ED_LABELS = {
     dhw_temp: "Tarbevee temperatuur", dhw_target: "Tarbevee siht", dhw_mode: "Tarbevee režiim", dhw_pump: "Tarbevee pump",
     mix_flow: "Segamissõlm: pealevool", mix_target: "Segamissõlm: siht", mix_return: "Segamissõlm: põranda tagasivool", mix_pump: "Segamisringi pump", heating_mode: "Kütte režiim",
     rad_pump: "Radiaatorite ringi pump", rad_flow: "Radiaatorid: pealevool", rad_return: "Radiaatorid: tagasivool", g_radcircuit: "Radiaatorite ring",
+    power: "Soojuspumba hetketarbimine (näidatakse W)", low_pressure: "Madalrõhk (valikuline)", high_pressure: "Kõrgrõhk (valikuline)",
     heat_flow_rate: "Soojushulga läbivool (kütte/tarbevee pumba juures)", source_flow_rate: "Kollektori läbivool (kollektori pumba juures)",
     floor: "Põrandakütte termostaadid (max 9, nimed YAML-is)", radiators: "Radiaatorite termostaadid (max 9, nimed YAML-is)",
     g_general: "Üldine", g_sections: "Kuvatavad osad", g_hp: "Soojuspump", g_pipe: "Pea- ja tagasivool", g_col: "Maakollektor",
@@ -552,6 +605,7 @@ const ED_LABELS = {
     dhw_temp: "DHW temperature", dhw_target: "DHW target", dhw_mode: "DHW mode", dhw_pump: "DHW pump",
     mix_flow: "Mixing valve: flow", mix_target: "Mixing valve: target", mix_return: "Mixing valve: floor return", mix_pump: "Mixing circuit pump", heating_mode: "Heating mode",
     rad_pump: "Radiator circuit pump", rad_flow: "Radiators: flow", rad_return: "Radiators: return", g_radcircuit: "Radiator circuit",
+    power: "Heat pump power consumption (shown in W)", low_pressure: "Low pressure (optional)", high_pressure: "High pressure (optional)",
     heat_flow_rate: "Heat amount flow rate (shown at heating / DHW pump)", source_flow_rate: "Heat source flow rate (shown at brine pump)",
     floor: "Underfloor thermostats (max 9, names in YAML)", radiators: "Radiator thermostats (max 9, names in YAML)",
     g_general: "General", g_sections: "Visible sections", g_hp: "Heat pump", g_pipe: "Flow and return", g_col: "Ground loop",
@@ -589,7 +643,7 @@ class LuxtronikHeatpumpCardEditor extends HTMLElement {
       grp(T.g_sections, ["show_collector", "show_buffer", "show_dhw", "show_floor", "show_radiators", "show_mixer", "show_cop"].map((n) => ({ name: n, selector: { boolean: {} } }))),
       grp(T.g_col, [e("brine_in", S), e("brine_out", S), e("brine_pump", B), e("source_flow_rate", S)]),
       grp(T.g_pipe, [e("flow_out", S), e("flow_in", S), e("flow_in_target", S), e("heating_pump", B), e("heat_flow_rate", S)]),
-      grp(T.g_hp, [e("status", S), e("compressor", B), e("outdoor", S), e("outdoor_avg", S), e("hot_gas", S), e("cop", S), e("capacity", S), e("hours", S), e("defrost", B), e("additional_heating", B)]),
+      grp(T.g_hp, [e("status", S), e("compressor", B), e("outdoor", S), e("outdoor_avg", S), e("hot_gas", S), e("power", S), e("low_pressure", S), e("high_pressure", S), e("cop", S), e("capacity", S), e("hours", S), e("defrost", B), e("additional_heating", B)]),
       grp(T.g_tanks, [e("buffer_temp", S), e("buffer_target", N), e("dhw_temp", S), e("dhw_target", N), e("dhw_mode", CL), e("dhw_pump", B)]),
       grp(T.g_mix, [e("mix_flow", S), e("mix_target", N), e("mix_return", S), e("mix_pump", B), e("heating_mode", CL)]),
       grp(T.g_radcircuit, [e("rad_flow", S), e("rad_return", S), e("rad_pump", B)]),

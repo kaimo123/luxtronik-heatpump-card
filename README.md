@@ -13,7 +13,13 @@ radiators (**up to 9 TRV-s**).
 
 - **Every sensor is optional.** Whatever you don't configure is not shown. If a whole section has nothing
   configured (e.g. no radiators, no mixing valve), it is left out of the schematic.
-- **Animated flow.** Dots move along the pipes only while the matching circulation pump is on.
+- **Heat pump cycle.** The heat pump box shows the refrigerant circuit (evaporator, compressor, condenser, expansion
+  valve) with the brine side on the left and the heating water on the right. The refrigerant dots move while the
+  compressor is on.
+- **Animated flow.** Dots move along every pipe only while a pump that actually pushes water through it is on
+  (see *Flow animation*). The buffer and DHW tank show their heat pump coil inside the tank.
+- **Every readout is optional.** Each value (outdoor temperature, power, pressures, flow rates, ...) appears only
+  when you select an entity for it, and the rows in the heat pump box repack when you remove one.
 - **Compact thermostat tiles.** Underfloor heating and radiators use the same small tiles, three per row.
   At most 9 per group: once 9 are selected, the editor offers no more entities.
 - **Flow-rate readouts** next to the pumps, shown only while the pump is running (see below).
@@ -33,7 +39,7 @@ radiators (**up to 9 TRV-s**).
    `/hacsfiles/luxtronik-heatpump-card/luxtronik-heatpump-card.js`
 
 Manual install: copy `luxtronik-heatpump-card.js` to `/config/www/` and add the resource
-`/local/luxtronik-heatpump-card.js?v=2.7.1` as a **JavaScript module**. Raise the `?v=` number after every update
+`/local/luxtronik-heatpump-card.js?v=2.8.0` as a **JavaScript module**. Raise the `?v=` number after every update
 so the browser doesn't use its cached copy.
 
 Then add the card from the card picker (**Luxtronik Heatpump Card**) and configure it in the visual editor,
@@ -56,6 +62,9 @@ status: sensor.luxtronik_status
 compressor: binary_sensor.luxtronik_compressor
 outdoor: sensor.luxtronik_outdoor_temperature
 hot_gas: sensor.luxtronik_hot_gas_temperature
+power: sensor.luxtronik_heat_pump_power      # shown in W (kW is converted)
+low_pressure: sensor.luxtronik_low_pressure   # optional
+high_pressure: sensor.luxtronik_high_pressure # optional
 cop: sensor.luxtronik_cop
 # Shared flow / return pipe
 flow_out: sensor.luxtronik_flow_out_temperature
@@ -110,9 +119,11 @@ cop_dhw_consumed: sensor.luxtronik_domestic_water_energy_input
 | `brine_in`, `brine_out` | Ground loop temperature in / out | sensor | |
 | `brine_pump` | Ground loop (brine) pump | binary_sensor / switch | ground loop |
 | `source_flow_rate` | Heat source (brine) flow rate, shown at the brine pump **only while it runs** | sensor | |
-| `status`, `compressor` | Heat pump status, compressor | sensor / binary_sensor | |
-| `outdoor`, `outdoor_avg` | Outdoor temperature, average | sensor | |
-| `hot_gas` | Hot gas temperature | sensor | |
+| `status`, `compressor` | Heat pump status, compressor. The compressor icon turns green and the refrigerant dots move while it is on | sensor / binary_sensor | refrigerant circuit |
+| `outdoor`, `outdoor_avg` | Outdoor temperature, average (shown above the ground loop) | sensor | |
+| `hot_gas` | Hot gas temperature (on the compressor outlet line) | sensor | |
+| `power` | Heat pump power consumption, always shown in **W** (kW and MW sensors are converted). Shown at the compressor | sensor | |
+| `low_pressure`, `high_pressure` | Low / high refrigerant pressure (optional) | sensor | |
 | `flow_out` | Flow temperature (shown on the shared pipe) | sensor | |
 | `flow_in` | Return temperature (shown on the shared pipe) | sensor | |
 | `flow_in_target` | Return target temperature | sensor | |
@@ -138,6 +149,24 @@ If an entity is configured but does not exist, its value is shown dimmed as `?` 
 
 Targets and modes are written as before in older configurations: a `climate` or `sensor` entity still displays its
 state, only the visual editor now offers `number` / `select` entities.
+
+## Flow animation
+
+Every pipe segment is drawn once and animates when **at least one** pump that circulates water through it is on.
+Shared pipes therefore never show doubled dots, and each situation looks right:
+
+| Pump on | Animated pipes |
+|---|---|
+| `brine_pump` | the whole ground-loop circuit through the evaporator |
+| `heating_pump` | heat pump ↔ heating buffer (shared flow/return trunk, condenser coil, coil inside the buffer) |
+| `dhw_pump` | heat pump ↔ DHW tank (shared trunk, DHW branch, coil inside the DHW tank) |
+| `mix_pump` | buffer outlet → mixing valve → underfloor loop → return to the buffer |
+| `rad_pump` | buffer outlet → supply trunk → radiators → return to the buffer |
+| `compressor` | refrigerant circuit (evaporator → compressor → condenser → expansion valve) |
+
+The shared trunk between the heat pump and the tanks moves when either the heating or the DHW pump runs; the buffer
+outlet and the return into the buffer move when either the mixing or the radiator circuit runs. If `mix_pump` /
+`rad_pump` are not configured, the `heating_pump` drives the matching load circuit instead.
 
 ## COP / SCOP table
 
@@ -182,6 +211,9 @@ official class depends on the product data sheet.
 
 ## Changelog
 
+- **2.8.0** New heat pump section with the refrigerant cycle; outdoor temperature above the ground loop; `power` (W),
+  `low_pressure`, `high_pressure`; heat pump coils drawn inside the buffer and DHW tank; flow animation rebuilt so every
+  pipe segment moves exactly when a pump driving it is on. The card is now 1700 px wide (was 1460).
 - **2.7.1** Flow animation on the buffer outlet and supply trunk now also runs when only the mixing or radiator pump is on.
 - **2.7.0** Rows of the COP table can be hidden one by one; column headers read "24 h (COP)", "7 days (COP)", "Month (COP)", "Year (SCOP)".
 - **2.6.2** COP sums only over periods where heat and electricity data both exist.
