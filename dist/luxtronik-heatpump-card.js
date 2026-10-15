@@ -1,9 +1,9 @@
 /*!
- * Luxtronik Heatpump Card  v2.12.1
+ * Luxtronik Heatpump Card  v2.12.2
  * Maasoojuspumba skeemikaart (Home Assistant + BenPru/luxtronik).
  * Iga andur on valikuline: mida pole seadistatud ega leita, seda ei kuvata.
  */
-const LHC_VERSION = "2.12.1";
+const LHC_VERSION = "2.12.2";
 const W = 1630, D = 190; // D = parempoolse osa nihe (soojuspumba kast on 380 px lai)
 const HOT = "#e5533d", COLD = "#3d8be5", BRINE = "#4fb3d9", MIX = "#f0a030", GROUND = "#a98467", REF_C = "#6c63d9", ELEC = "#f5b700";
 const FX = [1030, 1160, 1290], LP = 72; // termostaatide veergude x ja ridade samm (sama mis radiaatoritel)
@@ -178,7 +178,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
     const RY = [0, 88, 176].slice(0, nRows).map((d) => RB + 50 + d);
     const RET_BOTTOM = nRows ? RY[nRows - 1] + 100 : 850; // radiaatorite tagasivoolu põhitoru y
     const nx = (["hours", "defrost", "additional_heating"].filter((k) => R[k]).length) + this._extras.length; // püsivad lisaread soojuspumba kasti all
-    const HB = 655 + (nx ? nx * 20 + 14 : 0);      // soojuspumba kasti kõrgus
+    const HB = 685 + (nx ? nx * 20 + 14 : 0);      // soojuspumba kasti kõrgus
     const H = Math.max(780, 90 + HB + 40, floorOn ? FLOOR_BOTTOM + 30 : 0, nRows ? RET_BOTTOM + 40 : 0);
     o.push(`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"><defs>`);
     [["h", HOT], ["c", COLD], ["b", BRINE], ["e", ELEC]].forEach(([n, c]) =>
@@ -232,7 +232,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
     val(457, 157, R.power, { size: 16, bold: true, fmt: "watt", anchor: "start" }); // hetketarbimine W
     o.push(`<path d="M420,628 L460,662 V628 L420,662 Z" fill="var(--card-background-color)" stroke="var(--secondary-text-color)" stroke-width="2.5" stroke-linejoin="round"/>`);
     lbl(440, 684, L.expansion, 10);
-    val(440, 706, R.superheat, { prefix: L.superheat, size: 13, warn: [R.superheat_target || "", C.superheat_limit || ""] }); // siht ei ole nähtav; ületamisel läheb punaseks
+    val(440, 708, R.superheat, { prefix: L.superheat, size: 13, warn: [R.superheat_target || "", C.superheat_limit || ""] }); // siht ei ole nähtav; ületamisel läheb punaseks
     if (R.defrost_valve) { // sulatusventiil: kuumgaasi möödavool aurustisse; oranž, kui avatud
       const dv = "M480,210 V300 H395";
       o.push(`<path d="${dv}" fill="none" stroke="#f5a623" stroke-opacity=".25" stroke-width="5" stroke-linejoin="round" stroke-dasharray="3 5"/>`);
@@ -241,7 +241,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       lbl(437, 326, L.defrost_valve, 9);
     }
     val(478, 190, R.hot_gas, { prefix: L.hot_gas, size: 14, anchor: "start" });
-    val(340, 716, R.low_pressure, { prefix: L.low_pressure, size: 13 }); val(540, 716, R.high_pressure, { prefix: L.high_pressure, size: 13 });
+    val(340, 738, R.low_pressure, { prefix: L.low_pressure, size: 13 }); val(540, 738, R.high_pressure, { prefix: L.high_pressure, size: 13 });
     // töötamise info vasakul üleval: olek/kompressor/COP/võimsus on nähtavad ainult kui kompressor töötab (kui see olem on valitud)
     const rows = [["status", "", true, 1], ["compressor", "", false, 1], ["cop", "", true, 1], ["capacity", "", false, 1], ["hours"], ["defrost"], ["additional_heating"]]
       .filter(([k]) => R[k]).map(([k, , b, run]) => ({ id: R[k], prefix: k === "status" ? "" : L[k], bold: !!b, run: !!run }));
@@ -252,7 +252,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
     });
     rows.forEach((r) => {
       if (r.run) val(268, 150, r.id, { prefix: r.prefix, bold: r.bold, size: 14, anchor: "start", row: 1, showOn: R.compressor || "" });
-      else val(268, 770 + 20 * sx++, r.id, { prefix: r.prefix, bold: r.bold, size: 13, anchor: "start" });
+      else val(268, 796 + 20 * sx++, r.id, { prefix: r.prefix, bold: r.bold, size: 13, anchor: "start" });
     });
 
     /* --- ühine pea- ja tagasivoolutoru soojuspumbalt mõlemale paagile --- */
