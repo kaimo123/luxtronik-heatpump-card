@@ -41,7 +41,7 @@ radiators (**up to 9 TRV-s**).
    `/hacsfiles/luxtronik-heatpump-card/luxtronik-heatpump-card.js`
 
 Manual install: copy `luxtronik-heatpump-card.js` to `/config/www/` and add the resource
-`/local/luxtronik-heatpump-card.js?v=2.9.0` as a **JavaScript module**. Raise the `?v=` number after every update
+`/local/luxtronik-heatpump-card.js?v=2.10.0` as a **JavaScript module**. Raise the `?v=` number after every update
 so the browser doesn't use its cached copy.
 
 Then add the card from the card picker (**Luxtronik Heatpump Card**) and configure it in the visual editor,
@@ -125,6 +125,7 @@ cop_dhw_consumed: sensor.luxtronik_domestic_water_energy_input
 | `outdoor`, `outdoor_avg` | Outdoor temperature, average (shown above the ground loop) | sensor | |
 | `hot_gas` | Hot gas temperature (on the compressor outlet line) | sensor | |
 | `power` | Heat pump power consumption, always shown in **W** (kW and MW sensors are converted). Shown at the compressor | sensor | |
+| `error`, `error_ignore` | Heat pump error: a red banner above the heat pump, shown only while an error is active. `error_ignore` = comma-separated states that count as normal (e.g. an old "Last error" text that never clears) | sensor / binary_sensor | |
 | `low_pressure`, `high_pressure` | Low / high refrigerant pressure (optional) | sensor | |
 | `flow_out` | Flow temperature (shown on the shared pipe) | sensor | |
 | `flow_in` | Return temperature (shown on the shared pipe) | sensor | |
@@ -213,6 +214,8 @@ official class depends on the product data sheet.
 | `show_cop` | Hide the whole table with `false` |
 
 ## Changelog
+
+- **2.10.0** New `error` entity: a red, pulsing banner above the heat pump appears only while there is an error (a `binary_sensor` that is `on`, or a text sensor whose state is not "none/ok/unknown/..."). Use `error_ignore` (comma-separated states) to treat specific old messages as normal.
 
 - **2.9.0** New `cop_heat_correction` (multiplies the produced heat before COP/SCOP; e.g. `0.55` if the heat meter reads ~1.8x too high). While the DHW pump runs, the heating-buffer branch is idle (no dots), like a diverter valve. Heating/DHW mode text is hidden when the mode is "Automatic" (other modes still show). Mixing/radiator labels moved clear of the trunk pipe; tank labels shrink to fit.
 
