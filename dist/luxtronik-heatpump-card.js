@@ -1,9 +1,9 @@
 /*!
- * Luxtronik Heatpump Card  v2.8.1
+ * Luxtronik Heatpump Card  v2.8.2
  * Maasoojuspumba skeemikaart (Home Assistant + BenPru/luxtronik).
  * Iga andur on valikuline: mida pole seadistatud ega leita, seda ei kuvata.
  */
-const LHC_VERSION = "2.8.1";
+const LHC_VERSION = "2.8.2";
 const W = 1700, D = 260; // D = parempoolse osa nihe (soojuspumba kast on 450 px lai)
 const HOT = "#e5533d", COLD = "#3d8be5", BRINE = "#4fb3d9", MIX = "#f0a030", GROUND = "#a98467", REF_C = "#6c63d9", ELEC = "#f5b700";
 const FX = [1030, 1160, 1290], LP = 72; // termostaatide veergude x ja ridade samm (sama mis radiaatoritel)
@@ -193,7 +193,6 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       box(20, 215, 120, 400, GROUND); lbl(80, 243, L.collector, 12);
       pipe("M140,285 H45 V340 H115 V395 H45 V450 H115 V505 H45 V560 H140", GROUND, null, 5);
       pipe("M140,285 H290", BRINE, "b"); pipe("M290,560 H140", COLD, "c");
-      flow([R.brine_pump], [brineLoop]);
       pump(195, 560, R.brine_pump, 180); // toru liigub vasakule (soojuspumbalt kollektorisse)
       val(195, 262, R.brine_in, { prefix: L.brine_in }); val(195, 598, R.brine_out, { prefix: L.brine_out });
       // kollektori läbivool – ainult siis, kui kollektori pump töötab
@@ -206,6 +205,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
     box(250, 90, 450, 655, "#888"); lbl(475, 116, L.heatpump, 15);
     box(290, 245, 100, 355, COLD, 10, 0.1); box(560, 245, 100, 355, HOT, 10, 0.1);
     pipe(evapSerp, "url(#gE)"); pipe(condSerp, "url(#gC)");
+    if (colOn) flow([R.brine_pump], [brineLoop]); // soolvee täpid kollektoris, torudes ja aurustis (kastide peal)
     lbl(340, 266, L.evaporator, 12, COLD); lbl(610, 266, L.condenser, 10, HOT);
     const ref = (d, c) => { // külmaaine: nõrk taust + (kompressori töötades) liikuvad värvilised täpid
       o.push(`<path d="${d}" fill="none" stroke="${c}" stroke-opacity=".28" stroke-width="6" stroke-linejoin="round"/>`);
