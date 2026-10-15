@@ -41,7 +41,7 @@ radiators (**up to 9 TRV-s**).
    `/hacsfiles/luxtronik-heatpump-card/luxtronik-heatpump-card.js`
 
 Manual install: copy `luxtronik-heatpump-card.js` to `/config/www/` and add the resource
-`/local/luxtronik-heatpump-card.js?v=2.11.1` as a **JavaScript module**. Raise the `?v=` number after every update
+`/local/luxtronik-heatpump-card.js?v=2.12.0` as a **JavaScript module**. Raise the `?v=` number after every update
 so the browser doesn't use its cached copy.
 
 Then add the card from the card picker (**Luxtronik Heatpump Card**) and configure it in the visual editor,
@@ -129,6 +129,8 @@ cop_dhw_consumed: sensor.luxtronik_domestic_water_energy_input
 | `error_text` | Optional text sensor with the error message (e.g. Last error). Without `error`, the banner shows whenever this state is not "normal" | sensor | |
 | `error_ignore` | Comma-separated text states to treat as "no error" | text | |
 | `low_pressure`, `high_pressure` | Low / high refrigerant pressure (optional) | sensor | |
+| `superheat`, `superheat_target` | Superheat and its target (shown under the expansion valve) | sensor | |
+| `defrost_valve` | Defrost valve: a hot-gas bypass drawn in the centre of the heat pump; orange and animated while open | binary_sensor | |
 | `flow_out` | Flow temperature (shown on the shared pipe) | sensor | |
 | `flow_in` | Return temperature (shown on the shared pipe) | sensor | |
 | `flow_in_target` | Return target temperature | sensor | |
@@ -216,6 +218,8 @@ official class depends on the product data sheet.
 | `show_cop` | Hide the whole table with `false` |
 
 ## Changelog
+
+- **2.12.0** New optional entities `superheat` / `superheat_target` (shown under the expansion valve) and `defrost_valve` (binary sensor): a defrost bypass valve between the compressor outlet and the evaporator that turns orange with moving dots while it is open.
 
 - **2.11.1** The error banner is wider and shows the full title, cause and remedy on several lines (no truncation, no tooltip needed).
 

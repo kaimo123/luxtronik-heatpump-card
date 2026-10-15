@@ -1,9 +1,9 @@
 /*!
- * Luxtronik Heatpump Card  v2.11.1
+ * Luxtronik Heatpump Card  v2.12.0
  * Maasoojuspumba skeemikaart (Home Assistant + BenPru/luxtronik).
  * Iga andur on valikuline: mida pole seadistatud ega leita, seda ei kuvata.
  */
-const LHC_VERSION = "2.11.1";
+const LHC_VERSION = "2.12.0";
 const W = 1630, D = 190; // D = parempoolse osa nihe (soojuspumba kast on 380 px lai)
 const HOT = "#e5533d", COLD = "#3d8be5", BRINE = "#4fb3d9", MIX = "#f0a030", GROUND = "#a98467", REF_C = "#6c63d9", ELEC = "#f5b700";
 const FX = [1030, 1160, 1290], LP = 72; // termostaatide veergude x ja ridade samm (sama mis radiaatoritel)
@@ -35,7 +35,7 @@ const I18N = {
     capacity: "Võimsus: ", hours: "Töötunde: ", defrost: "Sulatus: ", additional_heating: "Lisaküte: ",
     flow: "Pealevool ", return: "Tagasivool ", target: "Siht ", temp: "Temp ", water: "Vesi ",
     floor_n: "Põrand ", rad_n: "Radiaator ", floor_return: "Põrandalt ",
-    error: "Viga: ", evaporator: "AURUSTI", condenser: "KONDENSAATOR", expansion: "PAISUTUSVENTIIL", low_pressure: "Madalrõhk ", high_pressure: "Kõrgrõhk ",
+    error: "Viga: ", superheat: "Ülekuum. ", superheat_target: "Siht ", defrost_valve: "SULATUSVENTIIL", evaporator: "AURUSTI", condenser: "KONDENSAATOR", expansion: "PAISUTUSVENTIIL", low_pressure: "Madalrõhk ", high_pressure: "Kõrgrõhk ",
   },
   en: {
     collector: "GROUND LOOP", heatpump: "HEAT PUMP", buffer: "HEATING BUFFER", dhw: "DHW TANK",
@@ -45,7 +45,7 @@ const I18N = {
     capacity: "Capacity: ", hours: "Hours: ", defrost: "Defrost: ", additional_heating: "Aux heater: ",
     flow: "Flow ", return: "Return ", target: "Target ", temp: "Temp ", water: "Water ",
     floor_n: "Floor ", rad_n: "Radiator ", floor_return: "Floor return ",
-    error: "Error: ", evaporator: "EVAPORATOR", condenser: "CONDENSER", expansion: "EXPANSION VALVE", low_pressure: "Low pressure ", high_pressure: "High pressure ",
+    error: "Error: ", superheat: "Superheat ", superheat_target: "Target ", defrost_valve: "DEFROST VALVE", evaporator: "EVAPORATOR", condenser: "CONDENSER", expansion: "EXPANSION VALVE", low_pressure: "Low pressure ", high_pressure: "High pressure ",
   },
 };
 
@@ -55,7 +55,7 @@ const ALL_KEYS = [
   "flow_out", "flow_in", "flow_in_target", "cop", "capacity", "hours", "defrost", "additional_heating",
   "heating_pump", "buffer_temp", "buffer_target", "dhw_temp", "dhw_target", "dhw_mode", "dhw_pump",
   "mix_flow", "mix_target", "mix_return", "mix_pump", "heating_mode",
-  "rad_pump", "rad_flow", "rad_return", "heat_flow_rate", "source_flow_rate", "power", "low_pressure", "high_pressure", "error", "error_text",
+  "rad_pump", "rad_flow", "rad_return", "heat_flow_rate", "source_flow_rate", "power", "low_pressure", "high_pressure", "error", "error_text", "superheat", "superheat_target", "defrost_valve",
 ];
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -232,6 +232,14 @@ class LuxtronikHeatpumpCard extends HTMLElement {
     val(457, 157, R.power, { size: 16, bold: true, fmt: "watt", anchor: "start" }); // hetketarbimine W
     o.push(`<path d="M420,628 L460,662 V628 L420,662 Z" fill="var(--card-background-color)" stroke="var(--secondary-text-color)" stroke-width="2.5" stroke-linejoin="round"/>`);
     lbl(440, 684, L.expansion, 10);
+    val(440, 703, R.superheat, { prefix: L.superheat, size: 12 }); val(440, 717, R.superheat_target, { prefix: L.superheat_target, size: 11 });
+    if (R.defrost_valve) { // sulatusventiil: kuumgaasi möödavool aurustisse; oranž, kui avatud
+      const dv = "M480,210 V300 H395";
+      o.push(`<path d="${dv}" fill="none" stroke="#f5a623" stroke-opacity=".25" stroke-width="5" stroke-linejoin="round" stroke-dasharray="3 5"/>`);
+      flow([R.defrost_valve], [dv], "rf", "#f5a623");
+      o.push(`<g class="dvalve" data-entity="${esc(R.defrost_valve)}"><path class="vf" d="M425,290 L449,310 V290 L425,310 Z" stroke-linejoin="round"/></g>`);
+      lbl(437, 326, L.defrost_valve, 9);
+    }
     val(478, 190, R.hot_gas, { prefix: L.hot_gas, size: 14, anchor: "start" });
     val(340, 716, R.low_pressure, { prefix: L.low_pressure, size: 13 }); val(540, 716, R.high_pressure, { prefix: L.high_pressure, size: 13 });
     // töötamise info vasakul üleval: olek/kompressor/COP/võimsus on nähtavad ainult kui kompressor töötab (kui see olem on valitud)
@@ -523,6 +531,8 @@ class LuxtronikHeatpumpCard extends HTMLElement {
         @keyframes m{from{stroke-dashoffset:0}to{stroke-dashoffset:-20}}
         @keyframes r{from{stroke-dashoffset:0}to{stroke-dashoffset:-9.1}}
         .flow.rf path{stroke-opacity:1;stroke-width:6;stroke-dasharray:.1 9;animation-name:r}
+        .dvalve .vf{fill:var(--card-background-color);stroke:var(--secondary-text-color);stroke-width:2.5}
+        .dvalve.on .vf{fill:#f5a623;stroke:#f5a623}
         .pump.comp circle{stroke-width:3}
         .pump.comp path{fill:none;stroke:var(--secondary-text-color);stroke-width:3;stroke-linecap:round}
         .pump.comp.on path{stroke:var(--success-color,#4caf50);fill:none}
@@ -650,7 +660,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       if (el.style.display === "none") return;
       el.setAttribute("y", 144 + ri * 18); ri++;
     });
-    root.querySelectorAll("g.pump").forEach((el) => {
+    root.querySelectorAll("g.pump, g.dvalve").forEach((el) => {
       const s = st[el.getAttribute("data-entity")];
       el.classList.toggle("on", !!s && s.state === "on");
     });
@@ -678,7 +688,7 @@ const ED_LABELS = {
     brine_in: "Kollektorisse (sisse) temp", brine_out: "Kollektorist (välja) temp", brine_pump: "Kollektori pump",
     status: "Staatus", compressor: "Kompressor", outdoor: "Välistemperatuur", outdoor_avg: "Välistemp. keskmine", hot_gas: "Kuumgaas",
     flow_out: "Pealevool (soojuspumbalt paakidesse)", flow_in: "Tagasivool (paakidest soojuspumbale)", flow_in_target: "Tagasivoolu siht",
-    error: "Soojuspumba viga: binaarandur (on = viga, riba näidatakse ainult siis)", error_text: "Vea tekst (tekstiandur, nt Last error)", error_ignore: "Vea olekud, mida ei peeta veaks (komadega eraldatud)", cop: "COP", capacity: "Soojusvõimsus", hours: "Töötunnid", defrost: "Sulatus", additional_heating: "Lisaküte",
+    superheat: "Ülekuumenemine (paisuventiili juures)", superheat_target: "Ülekuumenemise siht", defrost_valve: "Sulatusventiil (binaarandur)", error: "Soojuspumba viga: binaarandur (on = viga, riba näidatakse ainult siis)", error_text: "Vea tekst (tekstiandur, nt Last error)", error_ignore: "Vea olekud, mida ei peeta veaks (komadega eraldatud)", cop: "COP", capacity: "Soojusvõimsus", hours: "Töötunnid", defrost: "Sulatus", additional_heating: "Lisaküte",
     heating_pump: "Kütte ringluspump", buffer_temp: "Kütte akupaagi temperatuur", buffer_target: "Kütte akupaagi siht",
     dhw_temp: "Tarbevee temperatuur", dhw_target: "Tarbevee siht", dhw_mode: "Tarbevee režiim", dhw_pump: "Tarbevee pump",
     mix_flow: "Segamissõlm: pealevool", mix_target: "Segamissõlm: siht", mix_return: "Segamissõlm: põranda tagasivool", mix_pump: "Segamisringi pump", heating_mode: "Kütte režiim",
@@ -700,7 +710,7 @@ const ED_LABELS = {
     brine_in: "Ground loop in temp", brine_out: "Ground loop out temp", brine_pump: "Brine pump",
     status: "Status", compressor: "Compressor", outdoor: "Outdoor temperature", outdoor_avg: "Outdoor temp. average", hot_gas: "Hot gas",
     flow_out: "Flow (heat pump → tanks)", flow_in: "Return (tanks → heat pump)", flow_in_target: "Return target",
-    error: "Heat pump error: binary sensor (on = error, banner shown only then)", error_text: "Error text (text sensor, e.g. Last error)", error_ignore: "Error states to treat as normal (comma-separated)", cop: "COP", capacity: "Heating capacity", hours: "Operating hours", defrost: "Defrost", additional_heating: "Auxiliary heater",
+    superheat: "Superheat (at the expansion valve)", superheat_target: "Superheat target", defrost_valve: "Defrost valve (binary sensor)", error: "Heat pump error: binary sensor (on = error, banner shown only then)", error_text: "Error text (text sensor, e.g. Last error)", error_ignore: "Error states to treat as normal (comma-separated)", cop: "COP", capacity: "Heating capacity", hours: "Operating hours", defrost: "Defrost", additional_heating: "Auxiliary heater",
     heating_pump: "Heating circulation pump", buffer_temp: "Buffer tank temperature", buffer_target: "Buffer tank target",
     dhw_temp: "DHW temperature", dhw_target: "DHW target", dhw_mode: "DHW mode", dhw_pump: "DHW pump",
     mix_flow: "Mixing valve: flow", mix_target: "Mixing valve: target", mix_return: "Mixing valve: floor return", mix_pump: "Mixing circuit pump", heating_mode: "Heating mode",
@@ -743,7 +753,7 @@ class LuxtronikHeatpumpCardEditor extends HTMLElement {
       grp(T.g_sections, ["show_collector", "show_buffer", "show_dhw", "show_floor", "show_radiators", "show_mixer", "show_delta", "show_cop"].map((n) => ({ name: n, selector: { boolean: {} } }))),
       grp(T.g_col, [e("brine_in", S), e("brine_out", S), e("brine_pump", B), e("source_flow_rate", S)]),
       grp(T.g_pipe, [e("flow_out", S), e("flow_in", S), e("flow_in_target", S), e("heating_pump", B), e("heat_flow_rate", S)]),
-      grp(T.g_hp, [e("status", S), e("compressor", B), e("outdoor", S), e("outdoor_avg", S), e("hot_gas", S), e("power", S), e("low_pressure", S), e("high_pressure", S), e("cop", S), e("capacity", S), e("hours", S), e("defrost", B), e("additional_heating", B), e("error", undefined), e("error_text", undefined), { name: "error_ignore", selector: { text: {} } }]),
+      grp(T.g_hp, [e("status", S), e("compressor", B), e("outdoor", S), e("outdoor_avg", S), e("hot_gas", S), e("power", S), e("low_pressure", S), e("high_pressure", S), e("cop", S), e("capacity", S), e("hours", S), e("defrost", B), e("additional_heating", B), e("superheat", S), e("superheat_target", S), e("defrost_valve", B), e("error", undefined), e("error_text", undefined), { name: "error_ignore", selector: { text: {} } }]),
       grp(T.g_tanks, [e("buffer_temp", S), e("buffer_target", N), e("dhw_temp", S), e("dhw_target", N), e("dhw_mode", CL), e("dhw_pump", B)]),
       grp(T.g_mix, [e("mix_flow", S), e("mix_target", N), e("mix_return", S), e("mix_pump", B), e("heating_mode", CL)]),
       grp(T.g_radcircuit, [e("rad_flow", S), e("rad_return", S), e("rad_pump", B)]),
