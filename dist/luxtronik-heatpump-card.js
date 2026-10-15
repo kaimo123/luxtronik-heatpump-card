@@ -1,9 +1,9 @@
 /*!
- * Luxtronik Heatpump Card  v2.10.1
+ * Luxtronik Heatpump Card  v2.10.2
  * Maasoojuspumba skeemikaart (Home Assistant + BenPru/luxtronik).
  * Iga andur on valikuline: mida pole seadistatud ega leita, seda ei kuvata.
  */
-const LHC_VERSION = "2.10.1";
+const LHC_VERSION = "2.10.2";
 const W = 1630, D = 190; // D = parempoolse osa nihe (soojuspumba kast on 380 px lai)
 const HOT = "#e5533d", COLD = "#3d8be5", BRINE = "#4fb3d9", MIX = "#f0a030", GROUND = "#a98467", REF_C = "#6c63d9", ELEC = "#f5b700";
 const FX = [1030, 1160, 1290], LP = 72; // termostaatide veergude x ja ridade samm (sama mis radiaatoritel)
@@ -608,7 +608,10 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       let msg = null;
       if (bin) {
         const b = st[bin];
-        if (b && b.state === "on") msg = (txt && txtOf(txt)) || b.attributes.friendly_name || bin;
+        if (b && b.state === "on") { // viga on: tekstianduri olek näidatakse sõna-sõnalt
+          const t = txt && st[txt] ? String(st[txt].state).trim() : "";
+          msg = (t && !["unknown", "unavailable"].includes(t.toLowerCase()) ? t : "") || b.attributes.friendly_name || bin;
+        }
       } else if (txt) msg = txtOf(txt) || null;
       g.style.display = msg ? "" : "none";
       if (msg) g.querySelector(".errt").textContent = (this._lang().error || "") + cut(msg, 34);
