@@ -33,7 +33,7 @@ radiators (**up to 9 TRV-s**).
    `/hacsfiles/luxtronik-heatpump-card/luxtronik-heatpump-card.js`
 
 Manual install: copy `luxtronik-heatpump-card.js` to `/config/www/` and add the resource
-`/local/luxtronik-heatpump-card.js?v=2.6.2` as a **JavaScript module**. Raise the `?v=` number after every update
+`/local/luxtronik-heatpump-card.js?v=2.7.1` as a **JavaScript module**. Raise the `?v=` number after every update
 so the browser doesn't use its cached copy.
 
 Then add the card from the card picker (**Luxtronik Heatpump Card**) and configure it in the visual editor,
@@ -141,8 +141,8 @@ state, only the visual editor now offers `number` / `select` entities.
 
 ## COP / SCOP table
 
-A table under the schematic with rows **Heating**, **Hot water** and **Total** and columns **24 h**, **7 days**,
-**Month** and **Year (SCOP)**. Each cell shows the COP, the heat produced and electricity consumed (kWh) and,
+A table under the schematic with rows **Heating**, **Hot water** and **Total** and columns **24 h (COP)**, **7 days (COP)**,
+**Month (COP)** and **Year (SCOP)**. Rows can be switched off one by one. Each cell shows the COP, the heat produced and electricity consumed (kWh) and,
 optionally, a coloured energy-class badge (A+++ green … G red).
 
 The values come from Home Assistant **long-term statistics**, so the sensors must be energy counters with a
@@ -171,6 +171,7 @@ official class depends on the product data sheet.
 | `cop_heating_produced`, `cop_heating_consumed`, `cop_heating_aux`, `cop_heating_aux2`, `cop_heating_name` | Heating row: heat produced, electricity consumed, up to two auxiliary heater sensors, optional name |
 | `cop_dhw_produced`, `cop_dhw_consumed`, `cop_dhw_aux`, `cop_dhw_aux2`, `cop_dhw_name` | Hot water row, same options |
 | `cop_total_produced`, `cop_total_consumed`, `cop_total_aux`, `cop_total_aux2`, `cop_total_name` | Total row (optional, otherwise heating + hot water) |
+| `cop_show_heating`, `cop_show_dhw`, `cop_show_total` | Set a row to `false` to remove it from the table (default `true`) |
 | `cop_aux_included` | `true` if the consumed sensors already include the auxiliary heater (default `false`: aux is added) |
 | `cop_show_classes` | Coloured energy-class badges (default `true`) |
 | `cop_class_mode` | `eu_low` (low-temperature, ≤ 35 °C, default) or `eu_medium` (55 °C) |
@@ -181,6 +182,8 @@ official class depends on the product data sheet.
 
 ## Changelog
 
+- **2.7.1** Flow animation on the buffer outlet and supply trunk now also runs when only the mixing or radiator pump is on.
+- **2.7.0** Rows of the COP table can be hidden one by one; column headers read "24 h (COP)", "7 days (COP)", "Month (COP)", "Year (SCOP)".
 - **2.6.2** COP sums only over periods where heat and electricity data both exist.
 - **2.6.1** Energy-class badges in every cell; `show_cop` toggle among the section switches.
 - **2.6.0** COP / SCOP table from long-term statistics.

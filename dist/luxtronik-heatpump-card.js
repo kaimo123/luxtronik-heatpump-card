@@ -1,9 +1,9 @@
 /*!
- * Luxtronik Heatpump Card  v2.7.0
+ * Luxtronik Heatpump Card  v2.7.1
  * Maasoojuspumba skeemikaart (Home Assistant + BenPru/luxtronik).
  * Iga andur on valikuline: mida pole seadistatud ega leita, seda ei kuvata.
  */
-const LHC_VERSION = "2.7.0";
+const LHC_VERSION = "2.7.1";
 const W = 1460, D = 60; // D = parempoolse osa nihe
 const HOT = "#e5533d", COLD = "#3d8be5", BRINE = "#4fb3d9", MIX = "#f0a030", GROUND = "#a98467";
 const FX = [1030, 1160, 1290], LP = 88; // termostaatide veergude x ja ridade samm (sama mis radiaatoritel)
@@ -252,7 +252,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
         val(885, FLOOR_Y + 30, R.mix_return, { prefix: L.floor_return });
       }
       // põrandakütte voolu animatsioon (tagasivool jätkub akupaagini, kui radiaatoreid pole)
-      flow(R.mix_pump, [`${serp.replace(`M940,${Y0}`, `M830,${Y0}`).replace(/ H940$/, "")} H800 V340${radOn ? "" : " H760"}`]);
+      flow(R.mix_pump, [`${serp.replace(`M940,${Y0}`, `M760,${Y0}`).replace(/ H940$/, "")} H800 V340${radOn ? "" : " H760"}`]);
       // kompaktsed plaadid, 3 reas – sama kujundus kui radiaatoritel
       this._floor.forEach((f, n) => {
         const ys = FYs[Math.floor(n / 3)], cx = FX[n % 3];
@@ -294,7 +294,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
         this._rads.forEach((r, n) => { const ys = RY[Math.floor(n / 3)], cx = FX[n % 3]; rp.push(`M${cx},${ys} V${ys + 12}`, `M${cx},${ys + 76} V${ys + 88}`); });
         RY.forEach((ys) => rp.push(`M1000,${ys + 88} H${xr}`));
         rp.push(`M${xr},${y0 + 88} V${RET_BOTTOM} H800 V340 H760`);   // tagasivool: radiaatoritelt akupaaki
-        if (R.rad_pump) flow(R.rad_pump, rp); else p.push(...rp);       // oma pump → oma animatsioon
+        if (R.rad_pump) flow(R.rad_pump, [`M760,110 H830 V${supTrunkEnd}`, ...rp]); else p.push(...rp);       // oma pump → oma animatsioon
         pump(885, y0, R.rad_pump);
       }
       flow(R.heating_pump, p);
