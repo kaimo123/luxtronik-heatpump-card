@@ -247,6 +247,7 @@ official class depends on the product data sheet.
 | `show_cop` | Hide the whole table with `false` |
 
 ## Changelog
+
 - **2.12.2** Roomier bottom of the heat pump: superheat centred under the expansion valve, low/high pressure on their own row.
 - **2.12.1** The superheat target is no longer displayed; the superheat value turns red when it exceeds the target (or the optional `superheat_limit`). A target above 25 while the value is below 25 is treated as 10x scaled.
 - **2.12.0** New optional entities `superheat` / `superheat_target` (shown under the expansion valve) and `defrost_valve` (binary sensor): a defrost bypass valve between the compressor outlet and the evaporator that turns orange with moving dots while it is open.
