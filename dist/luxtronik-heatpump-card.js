@@ -1,9 +1,9 @@
 /*!
- * Luxtronik Heatpump Card  v2.8.2
+ * Luxtronik Heatpump Card  v2.8.3
  * Maasoojuspumba skeemikaart (Home Assistant + BenPru/luxtronik).
  * Iga andur on valikuline: mida pole seadistatud ega leita, seda ei kuvata.
  */
-const LHC_VERSION = "2.8.2";
+const LHC_VERSION = "2.8.3";
 const W = 1700, D = 260; // D = parempoolse osa nihe (soojuspumba kast on 450 px lai)
 const HOT = "#e5533d", COLD = "#3d8be5", BRINE = "#4fb3d9", MIX = "#f0a030", GROUND = "#a98467", REF_C = "#6c63d9", ELEC = "#f5b700";
 const FX = [1030, 1160, 1290], LP = 72; // termostaatide veergude x ja ridade samm (sama mis radiaatoritel)
@@ -164,12 +164,13 @@ class LuxtronikHeatpumpCard extends HTMLElement {
     const Y0 = 110;                                // põranda pealevoolutoru y (samal kõrgusel akupaagi väljundiga)
     const nFR = Math.max(1, Math.ceil(this._floor.length / 3));
     const FYs = Array.from({ length: nFR + 1 }, (_, k) => Y0 + LP * k); // torude y-d
-    if (FYs.length % 2) FYs.push(FYs[FYs.length - 1] + 40);            // serpentiin peab lõppema vasakul
+    const direct = nFR <= 2;                       // kuni 6 termostaati: torud otse (pealevool üleval, tagasivool all)
+    if (!direct && FYs.length % 2) FYs.push(FYs[FYs.length - 1] + 40); // serpentiin peab lõppema vasakul
     const FLOOR_Y = FYs[FYs.length - 1];           // põranda tagasivoolutoru y
     const FLOOR_BOTTOM = FLOOR_Y + 22;             // põrandakütte raami alumine serv
     let serp = `M940,${Y0} H1362`;                 // torulaine (serpentiin) põranda sees
-    for (let k = 1; k < FYs.length; k++) serp += ` V${FYs[k]} H${k % 2 ? 958 : 1362}`;
-    serp += " H940";
+    if (direct) serp = `M940,${Y0} H1362 V${FLOOR_Y} H940`;
+    else { for (let k = 1; k < FYs.length; k++) serp += ` V${FYs[k]} H${k % 2 ? 958 : 1362}`; serp += " H940"; }
     const RB = floorOn ? FLOOR_BOTTOM + 30 : 450; // radiaatorite raami ülemine serv
     const nRows = radOn ? Math.max(1, Math.ceil(this._rads.length / 3)) : 0;
     const RY = [0, 88, 176].slice(0, nRows).map((d) => RB + 50 + d);
@@ -310,12 +311,18 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       box(940, RB, 440, RET_BOTTOM + 20 - RB, HOT); lbl(1160, RB + 28, L.radiators);
       const y0 = RY[0], yl = RY[nRows - 1], xs = 960, xr = 1362;
       // pealevool: magistraal → esimene rida, tõusutoru vasakul, järgmised read
-      pipe(`M830,${y0} H1340`, HOT, "h");
-      if (nRows > 1) pipe(`M${xs},${y0} V${yl}`, HOT);
-      RY.slice(1).forEach((ys) => pipe(`M${xs},${ys} H1340`, HOT, "h"));
-      // tagasivool: read → parempoolne tõusutoru → põhitoru → magistraal
-      RY.forEach((ys) => pipe(`M1000,${ys + 72} H${xr}`, COLD));
-      pipe(`M${xr},${y0 + 72} V${RET_BOTTOM}`, COLD); pipe(`M${xr},${RET_BOTTOM} H800`, COLD, "c");
+      const hasT = this._rads.length > 0, rowT = (r) => this._rads.length > r * 3; // read ilma radiaatoriteta jäävad nähtamatuks
+      if (hasT) {
+        pipe(`M830,${y0} H1340`, HOT, "h");
+        if (nRows > 1) pipe(`M${xs},${y0} V${yl}`, HOT);
+        RY.slice(1).forEach((ys) => pipe(`M${xs},${ys} H1340`, HOT, "h"));
+        // tagasivool: read → parempoolne tõusutoru → põhitoru → magistraal
+        RY.forEach((ys, r) => { if (rowT(r)) pipe(`M1000,${ys + 72} H${xr}`, COLD); });
+        pipe(`M${xr},${y0 + 72} V${RET_BOTTOM}`, COLD);
+      } else {
+        pipe(`M830,${y0} H${xr}`, HOT); pipe(`M${xr},${y0} V${RET_BOTTOM}`, COLD);
+      }
+      pipe(`M${xr},${RET_BOTTOM} H800`, COLD, "c");
       val(885, y0 - 34, R.rad_flow, { prefix: L.flow });
       val(885, RET_BOTTOM - 24, R.rad_return, { prefix: L.return });
       // radiaator ilmub ainult siis, kui selle olem on valitud
@@ -335,12 +342,15 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       if (floorOn) flow(floorOwn, [`${serp.replace(`M940,${Y0}`, `M830,${Y0}`).replace(/ H940$/, "")} H838 A8,8 0 0 0 822,${FLOOR_Y} H800 V340`]);
       if (radOn) {
         const y0 = RY[0], yl = RY[nRows - 1], xs = 960, xr = 1362;
-        const rp = [`M830,${Y0} V${y0}`, `M830,${y0} H1340`];
-        if (nRows > 1) rp.push(`M${xs},${y0} V${yl}`);
-        RY.slice(1).forEach((ys) => rp.push(`M${xs},${ys} H1340`));
-        this._rads.forEach((r, n) => { const ys = RY[Math.floor(n / 3)], cx = FX[n % 3]; rp.push(`M${cx},${ys} V${ys + 8}`, `M${cx},${ys + 64} V${ys + 72}`); });
-        RY.forEach((ys) => rp.push(`M1000,${ys + 72} H${xr}`));
-        rp.push(`M${xr},${y0 + 72} V${RET_BOTTOM} H800 V340`);
+        const hasT = this._rads.length > 0;
+        const rp = [`M830,${Y0} V${y0}`, `M830,${y0} H${hasT ? 1340 : xr}`];
+        if (hasT) {
+          if (nRows > 1) rp.push(`M${xs},${y0} V${yl}`);
+          RY.slice(1).forEach((ys) => rp.push(`M${xs},${ys} H1340`));
+          this._rads.forEach((r, n) => { const ys = RY[Math.floor(n / 3)], cx = FX[n % 3]; rp.push(`M${cx},${ys} V${ys + 8}`, `M${cx},${ys + 64} V${ys + 72}`); });
+          RY.forEach((ys, r) => { if (this._rads.length > r * 3) rp.push(`M1000,${ys + 72} H${xr}`); });
+          rp.push(`M${xr},${y0 + 72} V${RET_BOTTOM} H800 V340`);
+        } else rp.push(`M${xr},${y0} V${RET_BOTTOM} H800 V340`);
         flow(radOwn, rp);
         pump(885, y0, R.rad_pump);
       }

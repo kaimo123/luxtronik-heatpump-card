@@ -39,7 +39,7 @@ radiators (**up to 9 TRV-s**).
    `/hacsfiles/luxtronik-heatpump-card/luxtronik-heatpump-card.js`
 
 Manual install: copy `luxtronik-heatpump-card.js` to `/config/www/` and add the resource
-`/local/luxtronik-heatpump-card.js?v=2.8.2` as a **JavaScript module**. Raise the `?v=` number after every update
+`/local/luxtronik-heatpump-card.js?v=2.8.3` as a **JavaScript module**. Raise the `?v=` number after every update
 so the browser doesn't use its cached copy.
 
 Then add the card from the card picker (**Luxtronik Heatpump Card**) and configure it in the visual editor,
@@ -210,6 +210,8 @@ official class depends on the product data sheet.
 | `show_cop` | Hide the whole table with `false` |
 
 ## Changelog
+
+- **2.8.3** Underfloor with up to 6 thermostats uses straight pipes (flow on top, return at the bottom; the zigzag returns from 7). Radiator rows without a radiator no longer draw their return pipe.
 
 - **2.8.2** Fixed missing flow dots in the evaporator and between the ground loop and the heat pump.
 
