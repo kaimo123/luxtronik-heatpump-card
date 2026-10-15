@@ -15,16 +15,20 @@ radiators (**up to 9 TRV-s**).
 
 - **Every sensor is optional.** Whatever you don't configure is not shown. If a whole section has nothing
   configured (e.g. no radiators, no mixing valve), it is left out of the schematic.
-- **Heat pump cycle.** The heat pump box shows the refrigerant circuit (evaporator, compressor, condenser, expansion
-  valve) with the brine side on the left and the heating water on the right. The refrigerant dots move while the
-  compressor is on.
+- **Heat pump cycle.** The heat pump box (card is 1630 px wide) shows the refrigerant circuit (evaporator, compressor,
+  condenser, expansion valve) with the brine side on the left and the heating water on the right. The refrigerant dots
+  move while the compressor is on. Status, compressor, COP and capacity appear top-left **only while the compressor
+  runs**; hours, defrost, auxiliary heater and extra rows sit at the bottom of the box.
+- **Error banner.** A red banner above the heat pump appears only while there is an error, with the error title, cause and
+  remedy (see *Error banner*).
 - **Animated flow.** Dots move along every pipe only while a pump that actually pushes water through it is on
   (see *Flow animation*). The buffer and DHW tank show their heat pump coil inside the tank.
 - **Every readout is optional.** Each value (outdoor temperature, power, pressures, flow rates, ...) appears only
   when you select an entity for it, and the rows in the heat pump box repack when you remove one.
 - **Compact thermostat tiles.** Underfloor heating and radiators use the same small tiles, three per row.
   At most 9 per group: once 9 are selected, the editor offers no more entities.
-- **Flow-rate readouts** next to the pumps, shown only while the pump is running (see below).
+- **Flow-rate and ΔT readouts.** Flow rates are shown next to the pumps only while the pump runs; ΔT (flow − return)
+  is shown on the ground loop and the heat pump ↔ tanks circuit only while the matching pumps run (`show_delta: false` hides it).
 - **COP / SCOP table** under the schematic, calculated from Home Assistant long-term statistics
   (24 h, 7 days, month, year) with coloured energy-class badges.
 - **Thermostat names** are taken from the entities (their friendly name). You can override them.
@@ -67,6 +71,11 @@ hot_gas: sensor.luxtronik_hot_gas_temperature
 power: sensor.luxtronik_heat_pump_power      # shown in W (kW is converted)
 low_pressure: sensor.luxtronik_low_pressure   # optional
 high_pressure: sensor.luxtronik_high_pressure # optional
+superheat: sensor.luxtronik_overheating       # optional, turns red above the target
+superheat_target: sensor.luxtronik_overheating_target  # optional, not displayed
+defrost_valve: binary_sensor.luxtronik_defrost_valve   # optional
+error: binary_sensor.luxtronik_disturbance_output      # on = show the error banner
+error_text: sensor.luxtronik_error_reason              # text shown in the banner
 cop: sensor.luxtronik_cop
 # Shared flow / return pipe
 flow_out: sensor.luxtronik_flow_out_temperature
@@ -98,6 +107,7 @@ cop_heating_produced: sensor.luxtronik_heat_amount_heating
 cop_heating_consumed: sensor.luxtronik_heating_energy_input
 cop_dhw_produced: sensor.luxtronik_heat_amount_domestic_water
 cop_dhw_consumed: sensor.luxtronik_domestic_water_energy_input
+cop_heat_correction: 0.55   # optional: correct a heat meter that over-reads (default 1)
 ```
 
 > The entity IDs above are examples. Check yours under *Developer tools → States*.
@@ -110,6 +120,8 @@ cop_dhw_consumed: sensor.luxtronik_domestic_water_energy_input
 | `language` | `et` or `en` (default: your Home Assistant language, English as fallback) |
 | `show_collector`, `show_buffer`, `show_dhw`, `show_floor`, `show_radiators`, `show_mixer` | Force a section on (`true`) or off (`false`). By default a section is shown when something is configured for it |
 | `show_cop` | Set to `false` to hide the COP / SCOP table. By default it is shown when COP sensors are configured |
+| `show_delta` | Set to `false` to hide the ΔT readouts (default `true`) |
+| `show_error` | Set to `false` to never show the error banner (default `true`) |
 | `floor` | Underfloor heating thermostats, **max 9**. Each item is an entity ID or `{entity, name}` |
 | `radiators` | Radiator thermostats, **max 9**. Same format |
 | `extras` | Up to 6 extra rows in the heat pump box, each `{entity, name}` |
@@ -125,11 +137,13 @@ cop_dhw_consumed: sensor.luxtronik_domestic_water_energy_input
 | `outdoor`, `outdoor_avg` | Outdoor temperature, average (shown above the ground loop) | sensor | |
 | `hot_gas` | Hot gas temperature (on the compressor outlet line) | sensor | |
 | `power` | Heat pump power consumption, always shown in **W** (kW and MW sensors are converted). Shown at the compressor | sensor | |
-| `error` | Binary sensor: `on` shows a red banner above the heat pump (hidden otherwise) | binary_sensor | |
-| `error_text` | Optional text sensor with the error message (e.g. Last error). Without `error`, the banner shows whenever this state is not "normal" | sensor | |
-| `error_ignore` | Comma-separated text states to treat as "no error" | text | |
+| `error` | Binary sensor: `on` shows the red error banner above the heat pump (hidden otherwise) | binary_sensor / switch | |
+| `error_text` | Text sensor with the error message (e.g. Luxtronik *Error reason*). Without `error`, the banner shows whenever this state is not "normal" | any | |
+| `error_ignore` | Comma-separated text states to treat as "no error" (only used when `error` is not set) | text | |
 | `low_pressure`, `high_pressure` | Low / high refrigerant pressure (optional) | sensor | |
-| `superheat`, `superheat_target` | Superheat and its target (shown under the expansion valve) | sensor | |
+| `superheat` | Superheat, shown under the expansion valve. Turns red (bold) when above the target / limit | sensor | |
+| `superheat_target` | Superheat target. **Not displayed**; used as the red threshold (a target above 25 K while the value is below 25 K is treated as 10× scaled, as Luxtronik reports it) | sensor | |
+| `superheat_limit` | Optional fixed red threshold in K, used instead of `superheat_target` | number | |
 | `defrost_valve` | Defrost valve: a hot-gas bypass drawn in the centre of the heat pump; orange and animated while open | binary_sensor | |
 | `flow_out` | Flow temperature (shown on the shared pipe) | sensor | |
 | `flow_in` | Return temperature (shown on the shared pipe) | sensor | |
@@ -151,11 +165,13 @@ cop_dhw_consumed: sensor.luxtronik_domestic_water_energy_input
 | `rad_flow`, `rad_return` | Radiator circuit flow and return temperature | sensor | |
 | `rad_pump` | Radiator circuit pump | binary_sensor / switch | radiator circuit |
 
-A tank's colour follows its temperature (blue at 20 °C → red at 60 °C) when `buffer_temp` / `dhw_temp` is set.
+The heating buffer is shaded like a stratified tank (red at the top, blue at the bottom); the DHW tank's colour follows
+its temperature (blue at 20 °C → red at 60 °C) when `dhw_temp` is set.
 If an entity is configured but does not exist, its value is shown dimmed as `?` so you can spot typos.
 
 Targets and modes are written as before in older configurations: a `climate` or `sensor` entity still displays its
-state, only the visual editor now offers `number` / `select` entities.
+state, only the visual editor now offers `number` / `select` entities. The heating / DHW mode text is hidden while the
+mode is "Automatic" (other modes are shown).
 
 ## Flow animation
 
@@ -170,10 +186,23 @@ Shared pipes therefore never show doubled dots, and each situation looks right:
 | `mix_pump` | buffer outlet → mixing valve → underfloor loop → return to the buffer |
 | `rad_pump` | buffer outlet → supply trunk → radiators → return to the buffer |
 | `compressor` | refrigerant circuit (evaporator → compressor → condenser → expansion valve) |
+| `defrost_valve` | hot-gas bypass from the compressor outlet to the evaporator (orange while open) |
 
 The shared trunk between the heat pump and the tanks moves when either the heating or the DHW pump runs; the buffer
 outlet and the return into the buffer move when either the mixing or the radiator circuit runs. If `mix_pump` /
 `rad_pump` are not configured, the `heating_pump` drives the matching load circuit instead.
+
+While the `dhw_pump` runs, the heating-buffer branch (its flow, return and coil) stands still, like a diverter valve
+that sends all water to the DHW tank.
+
+## Error banner
+
+Set `error` to a binary sensor (e.g. Luxtronik *Disturbance output*): while it is `on`, a red, pulsing banner appears
+above the heat pump; otherwise nothing is shown. Set `error_text` to the text sensor that carries the message (e.g.
+*Error reason*). The banner shows the title, the cause and the remedy of the error. The Home Assistant translated state is
+used first; the card also embeds the Luxtronik error-code table from BenPru/luxtronik (89 codes, English) as a fallback
+when only the numeric code is available. With only `error_text` set, the banner shows whenever its state is not "none /
+ok / unknown / …" (extend the list with `error_ignore`).
 
 ## COP / SCOP table
 
@@ -209,7 +238,7 @@ official class depends on the product data sheet.
 | `cop_total_produced`, `cop_total_consumed`, `cop_total_aux`, `cop_total_aux2`, `cop_total_name` | Total row (optional, otherwise heating + hot water) |
 | `cop_show_heating`, `cop_show_dhw`, `cop_show_total` | Set a row to `false` to remove it from the table (default `true`) |
 | `cop_aux_included` | `true` if the consumed sensors already include the auxiliary heater (default `false`: aux is added) |
-| `cop_heat_correction` | Factor applied to produced heat before COP/SCOP (default `1`). Use e.g. `0.55` when the heat meter over-reads by ~1.8x | number | `1` |
+| `cop_heat_correction` | Factor applied to produced heat before COP/SCOP (default `1`). Use e.g. `0.55` when the heat meter over-reads by ~1.8x |
 | `cop_show_classes` | Coloured energy-class badges (default `true`) |
 | `cop_class_mode` | `eu_low` (low-temperature, ≤ 35 °C, default) or `eu_medium` (55 °C) |
 | `cop_show_energy` | Show heat / electricity kWh under the COP (default `true`) |
@@ -218,37 +247,21 @@ official class depends on the product data sheet.
 | `show_cop` | Hide the whole table with `false` |
 
 ## Changelog
-
 - **2.12.2** Roomier bottom of the heat pump: superheat centred under the expansion valve, low/high pressure on their own row.
-
 - **2.12.1** The superheat target is no longer displayed; the superheat value turns red when it exceeds the target (or the optional `superheat_limit`). A target above 25 while the value is below 25 is treated as 10x scaled.
-
 - **2.12.0** New optional entities `superheat` / `superheat_target` (shown under the expansion valve) and `defrost_valve` (binary sensor): a defrost bypass valve between the compressor outlet and the evaporator that turns orange with moving dots while it is open.
-
 - **2.11.1** The error banner is wider and shows the full title, cause and remedy on several lines (no truncation, no tooltip needed).
-
 - **2.11.0** The error banner embeds the Luxtronik error-code table (from BenPru/luxtronik translations): title, cause and (as a tooltip) remedy. Home Assistant's translated state is used first; the table is the fallback when it only returns the code.
-
 - **2.10.4** The error banner shows the Home Assistant translated state (e.g. error code 723 → "Tempdiff DHW Please call fitter").
-
 - **2.10.3** The `error` and `error_text` pickers list all entities (no domain filter).
-
 - **2.10.2** When the binary error sensor is on, the banner shows the text sensor state verbatim.
-
 - **2.10.1** Error banner takes a binary sensor (`error`, `on` = error) and an optional text sensor (`error_text`, the message). If the binary sensor is set it decides when the banner shows; the text sensor only supplies the message. With only a text sensor, it shows when the state is not "normal".
-
 - **2.10.0** New `error` entity: a red, pulsing banner above the heat pump appears only while there is an error (a `binary_sensor` that is `on`, or a text sensor whose state is not "none/ok/unknown/..."). Use `error_ignore` (comma-separated states) to treat specific old messages as normal.
-
 - **2.9.0** New `cop_heat_correction` (multiplies the produced heat before COP/SCOP; e.g. `0.55` if the heat meter reads ~1.8x too high). While the DHW pump runs, the heating-buffer branch is idle (no dots), like a diverter valve. Heating/DHW mode text is hidden when the mode is "Automatic" (other modes still show). Mixing/radiator labels moved clear of the trunk pipe; tank labels shrink to fit.
-
 - **2.8.5** The heating buffer is shaded like a stratified tank: reddish at the top, bluish at the bottom.
-
 - **2.8.4** Narrower heat pump box (380 px, card 1630 px wide). Status, compressor, COP and capacity are shown top-left and only while the compressor runs; nothing else sits between the coils. Hours, defrost, auxiliary heating and extra rows move to the bottom of the box. ΔT readouts show only while the matching pumps run.
-
 - **2.8.3** Underfloor with up to 6 thermostats uses straight pipes (flow on top, return at the bottom; the zigzag returns from 7). Radiator rows without a radiator no longer draw their return pipe.
-
 - **2.8.2** Fixed missing flow dots in the evaporator and between the ground loop and the heat pump.
-
 - **2.8.1** Underfloor and radiator circuits are more compact (tighter rows and tiles). New ΔT readouts in the middle of the
   ground loop and the heat pump ↔ tanks circuit (flow − return; needs both sensors). Hide them with `show_delta: false`.
 - **2.8.0** New heat pump section with the refrigerant cycle; outdoor temperature above the ground loop; `power` (W),
