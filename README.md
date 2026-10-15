@@ -41,7 +41,7 @@ radiators (**up to 9 TRV-s**).
    `/hacsfiles/luxtronik-heatpump-card/luxtronik-heatpump-card.js`
 
 Manual install: copy `luxtronik-heatpump-card.js` to `/config/www/` and add the resource
-`/local/luxtronik-heatpump-card.js?v=2.10.0` as a **JavaScript module**. Raise the `?v=` number after every update
+`/local/luxtronik-heatpump-card.js?v=2.10.1` as a **JavaScript module**. Raise the `?v=` number after every update
 so the browser doesn't use its cached copy.
 
 Then add the card from the card picker (**Luxtronik Heatpump Card**) and configure it in the visual editor,
@@ -125,7 +125,9 @@ cop_dhw_consumed: sensor.luxtronik_domestic_water_energy_input
 | `outdoor`, `outdoor_avg` | Outdoor temperature, average (shown above the ground loop) | sensor | |
 | `hot_gas` | Hot gas temperature (on the compressor outlet line) | sensor | |
 | `power` | Heat pump power consumption, always shown in **W** (kW and MW sensors are converted). Shown at the compressor | sensor | |
-| `error`, `error_ignore` | Heat pump error: a red banner above the heat pump, shown only while an error is active. `error_ignore` = comma-separated states that count as normal (e.g. an old "Last error" text that never clears) | sensor / binary_sensor | |
+| `error` | Binary sensor: `on` shows a red banner above the heat pump (hidden otherwise) | binary_sensor | |
+| `error_text` | Optional text sensor with the error message (e.g. Last error). Without `error`, the banner shows whenever this state is not "normal" | sensor | |
+| `error_ignore` | Comma-separated text states to treat as "no error" | text | |
 | `low_pressure`, `high_pressure` | Low / high refrigerant pressure (optional) | sensor | |
 | `flow_out` | Flow temperature (shown on the shared pipe) | sensor | |
 | `flow_in` | Return temperature (shown on the shared pipe) | sensor | |
@@ -214,6 +216,8 @@ official class depends on the product data sheet.
 | `show_cop` | Hide the whole table with `false` |
 
 ## Changelog
+
+- **2.10.1** Error banner takes a binary sensor (`error`, `on` = error) and an optional text sensor (`error_text`, the message). If the binary sensor is set it decides when the banner shows; the text sensor only supplies the message. With only a text sensor, it shows when the state is not "normal".
 
 - **2.10.0** New `error` entity: a red, pulsing banner above the heat pump appears only while there is an error (a `binary_sensor` that is `on`, or a text sensor whose state is not "none/ok/unknown/..."). Use `error_ignore` (comma-separated states) to treat specific old messages as normal.
 

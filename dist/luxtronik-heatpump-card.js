@@ -1,9 +1,9 @@
 /*!
- * Luxtronik Heatpump Card  v2.10.0
+ * Luxtronik Heatpump Card  v2.10.1
  * Maasoojuspumba skeemikaart (Home Assistant + BenPru/luxtronik).
  * Iga andur on valikuline: mida pole seadistatud ega leita, seda ei kuvata.
  */
-const LHC_VERSION = "2.10.0";
+const LHC_VERSION = "2.10.1";
 const W = 1630, D = 190; // D = parempoolse osa nihe (soojuspumba kast on 380 px lai)
 const HOT = "#e5533d", COLD = "#3d8be5", BRINE = "#4fb3d9", MIX = "#f0a030", GROUND = "#a98467", REF_C = "#6c63d9", ELEC = "#f5b700";
 const FX = [1030, 1160, 1290], LP = 72; // termostaatide veergude x ja ridade samm (sama mis radiaatoritel)
@@ -53,7 +53,7 @@ const ALL_KEYS = [
   "flow_out", "flow_in", "flow_in_target", "cop", "capacity", "hours", "defrost", "additional_heating",
   "heating_pump", "buffer_temp", "buffer_target", "dhw_temp", "dhw_target", "dhw_mode", "dhw_pump",
   "mix_flow", "mix_target", "mix_return", "mix_pump", "heating_mode",
-  "rad_pump", "rad_flow", "rad_return", "heat_flow_rate", "source_flow_rate", "power", "low_pressure", "high_pressure", "error",
+  "rad_pump", "rad_flow", "rad_return", "heat_flow_rate", "source_flow_rate", "power", "low_pressure", "high_pressure", "error", "error_text",
 ];
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -206,8 +206,8 @@ class LuxtronikHeatpumpCard extends HTMLElement {
 
     /* --- soojuspump: külmaring (aurusti → kompressor → kondensaator → paisutusventiil) --- */
     const condSerp = "M590,560 H505 V505 H575 V450 H505 V395 H575 V340 H505 V285 H590";
-    if (R.error && C.show_error !== false) { // veateade soojuspumba kohal (peidetud, kui viga pole)
-      o.push(`<g class="errb" data-entity="${esc(R.error)}" data-ignore="${esc(C.error_ignore || "")}" style="display:none"><rect x="250" y="14" width="380" height="60" rx="12"/><path class="tri" d="M278,56 L292,28 L306,56 Z"/><text class="bang" x="292" y="52" text-anchor="middle">!</text><text class="errt" x="324" y="50">…</text></g>`);
+    if ((R.error || R.error_text) && C.show_error !== false) { // veateade soojuspumba kohal (peidetud, kui viga pole)
+      o.push(`<g class="errb" data-entity="${esc(R.error || "")}" data-text="${esc(R.error_text || "")}" data-ignore="${esc(C.error_ignore || "")}" style="display:none"><rect x="250" y="14" width="380" height="60" rx="12"/><path class="tri" d="M278,56 L292,28 L306,56 Z"/><text class="bang" x="292" y="52" text-anchor="middle">!</text><text class="errt" x="324" y="50">…</text></g>`);
     }
     box(250, 90, 380, HB, "#888"); lbl(440, 116, L.heatpump, 15);
     box(290, 245, 100, 355, COLD, 10, 0.1); box(490, 245, 100, 355, HOT, 10, 0.1);
@@ -597,16 +597,19 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       const so = el.getAttribute("data-show-on"), ho = el.getAttribute("data-hide-on");
       el.style.display = (so && !any(so)) || (ho && any(ho)) ? "none" : "";
     });
-    root.querySelectorAll("g.errb").forEach((g) => { // viga: binaarandur "on" või tekstiandur, mille olek pole "normaalne"
-      const id = g.getAttribute("data-entity"), s = st[id];
+    root.querySelectorAll("g.errb").forEach((g) => {
+      // binaarandur (on = viga) ja/või tekstiandur (sõnum). Kui binaarandur on seadistatud, otsustab see; muidu otsustab tekstiandur.
+      const bid = g.getAttribute("data-entity"), tid = g.getAttribute("data-text");
+      const isBin = (id) => /^(binary_sensor|switch)\./.test(id);
+      const ign = ["", "unknown", "unavailable", "none", "no error", "no errors", "ok", "off", "0", "-", "normal", "false", "ei ole", "puudub"]
+        .concat((g.getAttribute("data-ignore") || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean));
+      const txtOf = (id) => { const s = st[id]; const v = s ? String(s.state).trim() : ""; return ign.includes(v.toLowerCase()) ? "" : v; };
+      const bin = bid && isBin(bid) ? bid : "", txt = tid || (bid && !isBin(bid) ? bid : "");
       let msg = null;
-      if (s) {
-        const v = String(s.state).trim(), lv = v.toLowerCase();
-        const ign = ["", "unknown", "unavailable", "none", "no error", "no errors", "ok", "off", "0", "-", "normal", "false", "ei ole", "puudub"]
-          .concat((g.getAttribute("data-ignore") || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean));
-        if (id.startsWith("binary_sensor.") || id.startsWith("switch.")) { if (lv === "on") msg = s.attributes.friendly_name || id; }
-        else if (!ign.includes(lv)) msg = v;
-      }
+      if (bin) {
+        const b = st[bin];
+        if (b && b.state === "on") msg = (txt && txtOf(txt)) || b.attributes.friendly_name || bin;
+      } else if (txt) msg = txtOf(txt) || null;
       g.style.display = msg ? "" : "none";
       if (msg) g.querySelector(".errt").textContent = (this._lang().error || "") + cut(msg, 34);
     });
@@ -644,7 +647,7 @@ const ED_LABELS = {
     brine_in: "Kollektorisse (sisse) temp", brine_out: "Kollektorist (välja) temp", brine_pump: "Kollektori pump",
     status: "Staatus", compressor: "Kompressor", outdoor: "Välistemperatuur", outdoor_avg: "Välistemp. keskmine", hot_gas: "Kuumgaas",
     flow_out: "Pealevool (soojuspumbalt paakidesse)", flow_in: "Tagasivool (paakidest soojuspumbale)", flow_in_target: "Tagasivoolu siht",
-    error: "Soojuspumba viga (näidatakse silmapaistvalt ainult vea korral)", error_ignore: "Vea olekud, mida ei peeta veaks (komadega eraldatud)", cop: "COP", capacity: "Soojusvõimsus", hours: "Töötunnid", defrost: "Sulatus", additional_heating: "Lisaküte",
+    error: "Soojuspumba viga: binaarandur (on = viga, riba näidatakse ainult siis)", error_text: "Vea tekst (tekstiandur, nt Last error)", error_ignore: "Vea olekud, mida ei peeta veaks (komadega eraldatud)", cop: "COP", capacity: "Soojusvõimsus", hours: "Töötunnid", defrost: "Sulatus", additional_heating: "Lisaküte",
     heating_pump: "Kütte ringluspump", buffer_temp: "Kütte akupaagi temperatuur", buffer_target: "Kütte akupaagi siht",
     dhw_temp: "Tarbevee temperatuur", dhw_target: "Tarbevee siht", dhw_mode: "Tarbevee režiim", dhw_pump: "Tarbevee pump",
     mix_flow: "Segamissõlm: pealevool", mix_target: "Segamissõlm: siht", mix_return: "Segamissõlm: põranda tagasivool", mix_pump: "Segamisringi pump", heating_mode: "Kütte režiim",
@@ -666,7 +669,7 @@ const ED_LABELS = {
     brine_in: "Ground loop in temp", brine_out: "Ground loop out temp", brine_pump: "Brine pump",
     status: "Status", compressor: "Compressor", outdoor: "Outdoor temperature", outdoor_avg: "Outdoor temp. average", hot_gas: "Hot gas",
     flow_out: "Flow (heat pump → tanks)", flow_in: "Return (tanks → heat pump)", flow_in_target: "Return target",
-    error: "Heat pump error (shown prominently only when an error occurs)", error_ignore: "Error states to treat as normal (comma-separated)", cop: "COP", capacity: "Heating capacity", hours: "Operating hours", defrost: "Defrost", additional_heating: "Auxiliary heater",
+    error: "Heat pump error: binary sensor (on = error, banner shown only then)", error_text: "Error text (text sensor, e.g. Last error)", error_ignore: "Error states to treat as normal (comma-separated)", cop: "COP", capacity: "Heating capacity", hours: "Operating hours", defrost: "Defrost", additional_heating: "Auxiliary heater",
     heating_pump: "Heating circulation pump", buffer_temp: "Buffer tank temperature", buffer_target: "Buffer tank target",
     dhw_temp: "DHW temperature", dhw_target: "DHW target", dhw_mode: "DHW mode", dhw_pump: "DHW pump",
     mix_flow: "Mixing valve: flow", mix_target: "Mixing valve: target", mix_return: "Mixing valve: floor return", mix_pump: "Mixing circuit pump", heating_mode: "Heating mode",
@@ -709,7 +712,7 @@ class LuxtronikHeatpumpCardEditor extends HTMLElement {
       grp(T.g_sections, ["show_collector", "show_buffer", "show_dhw", "show_floor", "show_radiators", "show_mixer", "show_delta", "show_cop"].map((n) => ({ name: n, selector: { boolean: {} } }))),
       grp(T.g_col, [e("brine_in", S), e("brine_out", S), e("brine_pump", B), e("source_flow_rate", S)]),
       grp(T.g_pipe, [e("flow_out", S), e("flow_in", S), e("flow_in_target", S), e("heating_pump", B), e("heat_flow_rate", S)]),
-      grp(T.g_hp, [e("status", S), e("compressor", B), e("outdoor", S), e("outdoor_avg", S), e("hot_gas", S), e("power", S), e("low_pressure", S), e("high_pressure", S), e("cop", S), e("capacity", S), e("hours", S), e("defrost", B), e("additional_heating", B), e("error", ["sensor", "binary_sensor", "switch", "text"]), { name: "error_ignore", selector: { text: {} } }]),
+      grp(T.g_hp, [e("status", S), e("compressor", B), e("outdoor", S), e("outdoor_avg", S), e("hot_gas", S), e("power", S), e("low_pressure", S), e("high_pressure", S), e("cop", S), e("capacity", S), e("hours", S), e("defrost", B), e("additional_heating", B), e("error", ["binary_sensor", "switch"]), e("error_text", ["sensor", "text"]), { name: "error_ignore", selector: { text: {} } }]),
       grp(T.g_tanks, [e("buffer_temp", S), e("buffer_target", N), e("dhw_temp", S), e("dhw_target", N), e("dhw_mode", CL), e("dhw_pump", B)]),
       grp(T.g_mix, [e("mix_flow", S), e("mix_target", N), e("mix_return", S), e("mix_pump", B), e("heating_mode", CL)]),
       grp(T.g_radcircuit, [e("rad_flow", S), e("rad_return", S), e("rad_pump", B)]),
