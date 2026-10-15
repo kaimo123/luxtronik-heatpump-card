@@ -41,7 +41,7 @@ radiators (**up to 9 TRV-s**).
    `/hacsfiles/luxtronik-heatpump-card/luxtronik-heatpump-card.js`
 
 Manual install: copy `luxtronik-heatpump-card.js` to `/config/www/` and add the resource
-`/local/luxtronik-heatpump-card.js?v=2.10.4` as a **JavaScript module**. Raise the `?v=` number after every update
+`/local/luxtronik-heatpump-card.js?v=2.11.0` as a **JavaScript module**. Raise the `?v=` number after every update
 so the browser doesn't use its cached copy.
 
 Then add the card from the card picker (**Luxtronik Heatpump Card**) and configure it in the visual editor,
@@ -216,6 +216,8 @@ official class depends on the product data sheet.
 | `show_cop` | Hide the whole table with `false` |
 
 ## Changelog
+
+- **2.11.0** The error banner embeds the Luxtronik error-code table (from BenPru/luxtronik translations): title, cause and (as a tooltip) remedy. Home Assistant's translated state is used first; the table is the fallback when it only returns the code.
 
 - **2.10.4** The error banner shows the Home Assistant translated state (e.g. error code 723 → "Tempdiff DHW Please call fitter").
 
