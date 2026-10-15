@@ -1,9 +1,9 @@
 /*!
- * Luxtronik Heatpump Card  v2.11.0
+ * Luxtronik Heatpump Card  v2.11.1
  * Maasoojuspumba skeemikaart (Home Assistant + BenPru/luxtronik).
  * Iga andur on valikuline: mida pole seadistatud ega leita, seda ei kuvata.
  */
-const LHC_VERSION = "2.11.0";
+const LHC_VERSION = "2.11.1";
 const W = 1630, D = 190; // D = parempoolse osa nihe (soojuspumba kast on 380 px lai)
 const HOT = "#e5533d", COLD = "#3d8be5", BRINE = "#4fb3d9", MIX = "#f0a030", GROUND = "#a98467", REF_C = "#6c63d9", ELEC = "#f5b700";
 const FX = [1030, 1160, 1290], LP = 72; // termostaatide veergude x ja ridade samm (sama mis radiaatoritel)
@@ -209,7 +209,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
     /* --- soojuspump: külmaring (aurusti → kompressor → kondensaator → paisutusventiil) --- */
     const condSerp = "M590,560 H505 V505 H575 V450 H505 V395 H575 V340 H505 V285 H590";
     if ((R.error || R.error_text) && C.show_error !== false) { // veateade soojuspumba kohal (peidetud, kui viga pole)
-      o.push(`<g class="errb" data-entity="${esc(R.error || "")}" data-text="${esc(R.error_text || "")}" data-ignore="${esc(C.error_ignore || "")}" style="display:none"><rect x="250" y="14" width="380" height="60" rx="12"/><path class="tri" d="M278,56 L292,28 L306,56 Z"/><text class="bang" x="292" y="52" text-anchor="middle">!</text><text class="errt" x="324" y="38">…</text><text class="errc" x="324" y="58">&#8203;</text><title class="errtip"></title></g>`);
+      o.push(`<g class="errb" data-entity="${esc(R.error || "")}" data-text="${esc(R.error_text || "")}" data-ignore="${esc(C.error_ignore || "")}" style="display:none"><rect x="20" y="4" width="790" height="80" rx="12"/><path class="tri" d="M34,58 L52,26 L70,58 Z"/><text class="bang" x="52" y="54" text-anchor="middle">!</text><text class="errt" x="92" y="26">…</text></g>`);
     }
     box(250, 90, 380, HB, "#888"); lbl(440, 116, L.heatpump, 15);
     box(290, 245, 100, 355, COLD, 10, 0.1); box(490, 245, 100, 355, HOT, 10, 0.1);
@@ -518,7 +518,7 @@ class LuxtronikHeatpumpCard extends HTMLElement {
         .errb .tri{fill:#ffeb3b;stroke:#fff;stroke-width:2;stroke-linejoin:round}
         .errb .bang{fill:#b71c1c;font-size:20px;font-weight:900}
         .errb .errt{fill:#fff;font-size:15px;font-weight:700}
-        .errb .errc{fill:#ffd7d2;font-size:11px;font-weight:500}
+        .errb .errt tspan.c{fill:#ffd7d2;font-size:12.5px;font-weight:500}
         @keyframes eb{0%,100%{fill-opacity:1}50%{fill-opacity:.72}}
         @keyframes m{from{stroke-dashoffset:0}to{stroke-dashoffset:-20}}
         @keyframes r{from{stroke-dashoffset:0}to{stroke-dashoffset:-9.1}}
@@ -630,10 +630,18 @@ class LuxtronikHeatpumpCard extends HTMLElement {
       } else if (txt) { const ts = txtOk(txt); if (ts) res = info(ts); }
       g.style.display = res ? "" : "none";
       if (res) {
-        g.querySelector(".errt").textContent = (this._lang().error || "") + cut(res.title, 34);
-        g.querySelector(".errc").textContent = cut(res.cause, 52);
-        g.querySelector(".errt").setAttribute("y", res.cause ? 38 : 50);
-        g.querySelector(".errtip").textContent = [res.title, res.cause, res.fix].filter(Boolean).join("\n");
+        const wrap = (t, n) => { const out = []; let cur = ""; String(t).split(/\s+/).filter(Boolean).forEach((w) => { if ((cur + " " + w).trim().length > n) { out.push(cur); cur = w; } else cur = (cur + " " + w).trim(); }); if (cur) out.push(cur); return out; };
+        const lines = [{ t: (this._lang().error || "") + res.title, c: 0 }];
+        wrap(res.cause, 104).forEach((x) => lines.push({ t: x, c: 1 }));
+        wrap(res.fix, 100).forEach((x, i) => lines.push({ t: (i ? "   " : "→ ") + x, c: 1 }));
+        const L5 = lines.slice(0, 5); if (lines.length > 5) L5[4].t = cut(L5[4].t, 98) + "…";
+        const t = g.querySelector(".errt");
+        while (t.firstChild) t.removeChild(t.firstChild);
+        L5.forEach((l, i) => { const ts = document.createElementNS("http://www.w3.org/2000/svg", "tspan"); ts.setAttribute("x", "92"); ts.setAttribute("dy", i ? "15" : "0"); if (l.c) ts.setAttribute("class", "c"); ts.setAttribute("xml:space", "preserve"); ts.textContent = l.t; t.appendChild(ts); });
+        const h = Math.max(46, 20 + L5.length * 15 + 8);
+        g.querySelector("rect").setAttribute("height", h);
+        t.setAttribute("y", 4 + (h - (L5.length * 15 + 5)) / 2 + 14);
+        const mid = 4 + h / 2; g.querySelector(".tri").setAttribute("d", `M34,${mid + 16} L52,${mid - 16} L70,${mid + 16} Z`); g.querySelector(".bang").setAttribute("y", mid + 12);
       }
     });
     // soojuspumba info: nähtavad read pakitakse ülevalt alla
