@@ -39,7 +39,7 @@ radiators (**up to 9 TRV-s**).
    `/hacsfiles/luxtronik-heatpump-card/luxtronik-heatpump-card.js`
 
 Manual install: copy `luxtronik-heatpump-card.js` to `/config/www/` and add the resource
-`/local/luxtronik-heatpump-card.js?v=2.8.0` as a **JavaScript module**. Raise the `?v=` number after every update
+`/local/luxtronik-heatpump-card.js?v=2.8.1` as a **JavaScript module**. Raise the `?v=` number after every update
 so the browser doesn't use its cached copy.
 
 Then add the card from the card picker (**Luxtronik Heatpump Card**) and configure it in the visual editor,
@@ -211,6 +211,8 @@ official class depends on the product data sheet.
 
 ## Changelog
 
+- **2.8.1** Underfloor and radiator circuits are more compact (tighter rows and tiles). New ΔT readouts in the middle of the
+  ground loop and the heat pump ↔ tanks circuit (flow − return; needs both sensors). Hide them with `show_delta: false`.
 - **2.8.0** New heat pump section with the refrigerant cycle; outdoor temperature above the ground loop; `power` (W),
   `low_pressure`, `high_pressure`; heat pump coils drawn inside the buffer and DHW tank; flow animation rebuilt so every
   pipe segment moves exactly when a pump driving it is on. The card is now 1700 px wide (was 1460).
